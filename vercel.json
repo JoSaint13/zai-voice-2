@@ -19,8 +19,5 @@
       "src": "/(.*)",
       "dest": "public/$1"
     }
-  ],
-  "env": {
-    "ZHIPUAI_API_KEY": "@zhipuai_api_key"
-  }
+  ]
 }
