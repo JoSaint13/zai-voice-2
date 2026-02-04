@@ -1,203 +1,238 @@
-# Z.AI Voice Assistant with Multiple Features
+# Z.AI Voice Assistant
 
-A comprehensive voice assistant application powered by Z.AI (ZhipuAI) featuring:
-- 🎤 Voice Chat with GLM-ASR + GLM-4.7
-- 🌐 Translation Agent with 6 strategies
-- 📊 Slide/Presentation Generator
-- 🎥 Video Effects Templates
+A full-stack voice assistant powered by Z.AI's GLM-ASR (speech recognition) and GLM-4.7 (language model). Features voice chat, translation, slide generation, and video effects - all in one unified interface.
+
+![Z.AI](https://img.shields.io/badge/Powered%20by-Z.AI-blue)
+![Python](https://img.shields.io/badge/Python-3.9+-green)
+![Flask](https://img.shields.io/badge/Flask-3.0-lightgrey)
 
 ## Features
 
-### 1. Voice Assistant
-- **Speech-to-Text**: GLM-ASR-2512 for accurate transcription
-- **AI Chat**: GLM-4.7 for intelligent responses
-- **Text-to-Speech**: Browser-based TTS for voice responses
-- Real-time conversation with session management
+| Feature | Description | Pricing |
+|---------|-------------|---------|
+| **Voice Chat** | Speech-to-text + AI chat + text-to-speech | Standard API rates |
+| **Translation** | 40+ languages, 6 translation strategies | $3 per 1M tokens |
+| **Slides** | AI-generated presentations | $0.7 per 1M tokens |
+| **Video Effects** | Transform photos into effect videos | $0.2 per video |
 
-### 2. Translation Agent
-Supports 40+ languages with 6 professional translation strategies:
-- **General Translation**: Basic literal translation with cultural context
-- **Paraphrased Translation**: Natural adaptation to target language
-- **Two-Step Translation**: Literal first, then refined expression
-- **Three-Stage Translation**: Follows "faithfulness, expressiveness, elegance"
-- **Reflective Translation**: Expert feedback and optimization
-- **COT Translation**: Chain-of-thought reasoning for complex texts
+### Voice Assistant
+- **GLM-ASR-2512**: Accurate speech recognition
+- **GLM-4.7**: Intelligent conversational AI
+- **Browser TTS**: Voice responses read aloud
+- **Session Memory**: Maintains conversation context
 
-**Pricing**: $3 per 1M tokens
+### Translation Strategies
+| Strategy | Best For |
+|----------|----------|
+| General | Standard translations |
+| Paraphrased | Natural, fluent output |
+| Two-Step | Literal → refined expression |
+| Three-Stage | "Faithfulness, expressiveness, elegance" |
+| Reflective | Expert feedback optimization |
+| COT | Complex texts with reasoning |
 
-### 3. Slide/Presentation Generator
-- One-click professional slide generation
-- Smart information gathering
-- Elegant visual design suggestions
-- Customizable slide count and style
-- Perfect for reports, presentations, portfolios
+### Slide Generator
+- Professional presentations from any topic
+- 3-30 slides per generation
+- Styles: Professional, Creative, Minimal, Corporate
 
-**Pricing**: $0.7 per 1M tokens
+### Video Effects
+| Template | Description |
+|----------|-------------|
+| French Kiss | Two people gradually kiss (2-person photo) |
+| Body Shake | Rhythmic dance sequence |
+| Sexy Me | Clothing transformation effect |
 
-### 4. Video Effects Templates
-Three popular special effects templates:
-- **French Kiss** 💋: Two people gradually kiss (requires 2-person photo)
-- **Body Shake** 💃: Rhythmic dance sequence (single person)
-- **Sexy Me** ✨: Clothing transformation effect (single person)
-
-**Pricing**: $0.2 per video
-
-## Setup
+## Quick Start
 
 ### Prerequisites
-- Python 3.11+
-- ZhipuAI API key
-- Node.js (for development)
+- Python 3.9+
+- Z.AI API Key ([Get one here](https://api.z.ai))
 
 ### Installation
 
-1. Clone the repository:
 ```bash
-git clone <your-repo>
+# Clone repository
+git clone <your-repo-url>
 cd zai-voice-2
-```
 
-2. Create virtual environment:
-```bash
+# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-3. Install dependencies:
-```bash
+# Install dependencies
 pip install -r api/requirements.txt
-```
 
-4. Set environment variable:
-```bash
+# Set API key
 export ZHIPUAI_API_KEY="your-api-key-here"
-```
 
-5. Run the backend:
-```bash
+# Start server
 python api/index.py
 ```
 
-6. Serve the frontend (in a separate terminal):
+### Access
+
+Open http://localhost:8000 in your browser.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              Browser (http://localhost:8000)             │
+│  ┌─────────┐ ┌───────────┐ ┌────────┐ ┌───────────────┐ │
+│  │  Voice  │ │Translation│ │ Slides │ │ Video Effects │ │
+│  │  Chat   │ │           │ │        │ │               │ │
+│  └────┬────┘ └─────┬─────┘ └───┬────┘ └───────┬───────┘ │
+└───────┼────────────┼───────────┼──────────────┼─────────┘
+        │            │           │              │
+        └────────────┴─────┬─────┴──────────────┘
+                           │
+┌──────────────────────────┼──────────────────────────────┐
+│              Flask Server (api/index.py)                 │
+│                     Port 8000                            │
+├──────────────────────────┼──────────────────────────────┤
+│                     Z.AI API                             │
+│                 https://api.z.ai                         │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────┐ │
+│  │ GLM-ASR  │ │ GLM-4.7  │ │Translate │ │Slide/Video  │ │
+│  │ (Speech) │ │  (Chat)  │ │  Agent   │ │   Agents    │ │
+│  └──────────┘ └──────────┘ └──────────┘ └─────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+## API Reference
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Main application |
+| `/health` | GET | Health check |
+| `/api/chat` | POST | Text chat |
+| `/api/voice-chat` | POST | Voice → transcribe → chat |
+| `/api/transcribe` | POST | Audio transcription |
+| `/api/translate` | POST | Text translation |
+| `/api/generate-slides` | POST | Create presentation |
+| `/api/generate-video` | POST | Generate video effect |
+| `/api/reset` | POST | Clear session |
+
+### Examples
+
+**Chat**
 ```bash
-cd public
-python -m http.server 8080
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello!", "session_id": "my-session"}'
 ```
 
-7. Open in browser:
-- Main features: http://localhost:8080/zai-features.html
-- Original voice chat: http://localhost:8080/index.html
-
-## API Endpoints
-
-### Chat & Voice
-- `POST /api/chat` - Text chat with AI
-- `POST /api/transcribe` - Audio transcription
-- `POST /api/voice-chat` - Complete voice interaction
-- `POST /api/reset` - Reset conversation
-
-### Z.AI Features
-- `POST /api/translate` - Translate text with strategies
-- `POST /api/generate-slides` - Generate presentation slides
-- `POST /api/generate-video` - Create video effects
-- `GET /api/health` - Health check
-
-## Deployment to Vercel
-
-### Requirements
-1. Remove the root `requirements.txt` (heavy ML dependencies not needed)
-2. Keep `api/requirements.txt` minimal:
-```txt
-flask==3.0.0
-flask-cors
-zhipuai>=2.0.0
-```
-
-3. Set environment variable in Vercel:
-```
-ZHIPUAI_API_KEY=your-api-key
-```
-
-4. Deploy:
+**Translation**
 ```bash
-vercel --prod
+curl -X POST http://localhost:8000/api/translate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hello world",
+    "source_lang": "English",
+    "target_lang": "Chinese",
+    "strategy": "general"
+  }'
 ```
 
-## Configuration
-
-### Frontend Configuration
-Edit the API base URL in HTML files:
-```javascript
-const API_BASE = 'http://localhost:3000';  // Local
-// const API_BASE = 'https://your-app.vercel.app';  // Production
+**Generate Slides**
+```bash
+curl -X POST http://localhost:8000/api/generate-slides \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic": "AI Market Analysis 2024",
+    "num_slides": 10,
+    "style": "professional"
+  }'
 ```
 
-### Backend Configuration
-The backend automatically handles CORS and timeout settings:
-- Timeout: 60 seconds for API calls
-- CORS: Enabled for all routes
-- Error handling: User-friendly messages
+## Project Structure
 
-## Usage Examples
-
-### Translation
-```javascript
-POST /api/translate
-{
-  "text": "Hello world",
-  "source_lang": "English",
-  "target_lang": "Chinese",
-  "strategy": "general"
-}
+```
+zai-voice-2/
+├── api/
+│   ├── index.py           # Flask server (API + static files)
+│   └── requirements.txt   # Server dependencies
+├── public/
+│   └── index.html         # Unified frontend (all features)
+├── clawdbot.py            # CLI version (local ASR model)
+├── requirements.txt       # CLI dependencies
+├── vercel.json            # Vercel deployment config
+├── test_api.py            # API tests
+└── test_voice_flow.py     # Voice flow tests
 ```
 
-### Slide Generation
-```javascript
-POST /api/generate-slides
-{
-  "topic": "AI Market Analysis",
-  "num_slides": 10,
-  "style": "professional"
-}
+## Deployment
+
+### Vercel
+
+1. **Install Vercel CLI**
+   ```bash
+   npm i -g vercel
+   ```
+
+2. **Add environment variable**
+   ```bash
+   vercel env add ZHIPUAI_API_KEY
+   ```
+
+3. **Deploy**
+   ```bash
+   vercel --prod
+   ```
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ZHIPUAI_API_KEY` | Yes | Z.AI API key |
+
+## Development
+
+### Running Tests
+
+```bash
+python test_api.py
+python test_voice_flow.py
 ```
 
-### Video Generation
-```javascript
-POST /api/generate-video
-{
-  "image_base64": "base64_image_data...",
-  "template": "french_kiss"
-}
+### CLI Version
+
+For local development with on-device ASR:
+
+```bash
+pip install -r requirements.txt  # Includes PyTorch
+python clawdbot.py
 ```
+
+Note: Downloads GLM-ASR-Nano model (~1GB) on first run.
 
 ## Troubleshooting
 
-### API Timeout Issues
-If you encounter timeout errors:
-1. Check your internet connection
-2. Verify API key is valid
-3. Try with a VPN if in restricted regions
-4. Check Z.AI service status
+| Error | Solution |
+|-------|----------|
+| `401 Unauthorized` | Check API key is set correctly |
+| `Connection refused` | Start server with `python api/index.py` |
+| `Port in use` | Kill existing process: `lsof -ti :8000 \| xargs kill` |
+| `Microphone denied` | Allow microphone access in browser |
+| `Timeout` | Check internet connection, try VPN |
 
-### CORS Issues
-Make sure both servers are running:
-- Backend: http://localhost:3000
-- Frontend: http://localhost:8080
+## Browser Support
 
-### Connection Errors
-User-friendly error messages will appear:
-- ⏱️ Timeout: "The AI service is taking too long..."
-- 🔌 Connection: "Unable to connect to the AI service..."
-- 🔑 Auth: "Authentication failed. Check your API key..."
+| Browser | Support |
+|---------|---------|
+| Chrome/Edge | Full |
+| Firefox | Full |
+| Safari | Partial (HTTPS required for mic) |
 
-## Features Roadmap
+## Tech Stack
 
-- [ ] Real ASR recording with GLM-ASR-2512
-- [ ] Actual Z.AI video generation API integration
-- [ ] PDF export for generated slides
-- [ ] Multi-language UI
-- [ ] Voice cloning features
-- [ ] Image generation with CogView
+- **Backend**: Python, Flask, Flask-CORS
+- **Frontend**: HTML5, CSS3, Vanilla JS
+- **APIs**: Z.AI GLM-ASR-2512, GLM-4.7
+- **Deployment**: Vercel (serverless)
 
 ## License
 
@@ -205,9 +240,8 @@ MIT
 
 ## Credits
 
-Powered by [Z.AI](https://z.ai) (ZhipuAI)
+Powered by [Z.AI](https://z.ai)
 - GLM-4.7 language model
 - GLM-ASR-2512 speech recognition
-- Z.AI Translation Agent
-- Z.AI Slide Generator
-- Z.AI Video Template Agent
+- Translation Agent
+- Slide/Video Agents

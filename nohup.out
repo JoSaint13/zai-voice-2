@@ -7,3 +7,34 @@
  * Debugger is active!
  * Debugger PIN: 954-619-189
 127.0.0.1 - - [03/Feb/2026 20:05:53] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [03/Feb/2026 23:04:28] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [03/Feb/2026 23:04:29] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+ * Detected change in '/Users/andreyzherditskiy/work/zai-voice-2/api/index.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 954-619-189
+ * Detected change in '/Users/andreyzherditskiy/work/zai-voice-2/api/index.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 954-619-189
+ * Detected change in '/Users/andreyzherditskiy/work/zai-voice-2/api/index.py', reloading
+ * Restarting with stat
+📁 Serving static files from: /Users/andreyzherditskiy/work/zai-voice-2/public
+🌐 Frontend: http://localhost:8000
+🌐 Features: http://localhost:8000/features
+📡 API Docs: http://localhost:8000/api/health
+ * Debugger is active!
+ * Debugger PIN: 954-619-189
+ * Detected change in '/Users/andreyzherditskiy/work/zai-voice-2/api/index.py', reloading
+ * Restarting with stat
+📁 Serving static files from: /Users/andreyzherditskiy/work/zai-voice-2/public
+🌐 Frontend: http://localhost:8000
+🌐 Features: http://localhost:8000/features
+📡 API Docs: http://localhost:8000/api/health
+ * Debugger is active!
+ * Debugger PIN: 954-619-189
+127.0.0.1 - - [04/Feb/2026 00:22:30] "GET / HTTP/1.1" 200 -
+/usr/local/Cellar/python@3.13/3.13.11/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/resource_tracker.py:400: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-qsygj45_'}
+  warnings.warn(
+/usr/local/Cellar/python@3.13/3.13.11/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/resource_tracker.py:400: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-xgpwoxkq'}
+  warnings.warn(

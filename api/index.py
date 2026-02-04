@@ -7,11 +7,22 @@ import os
 import base64
 import tempfile
 import traceback
+import sqlite3
+import json
 import requests
-from flask import Flask, request, jsonify
+from dotenv import load_dotenv
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-app = Flask(__name__)
+# Load env vars
+load_dotenv()
+
+# Get the project root directory (parent of api/)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PUBLIC_DIR = os.path.join(PROJECT_ROOT, 'public')
+DB_PATH = os.path.join(PROJECT_ROOT, 'hotel_assistant.db')
+
+app = Flask(__name__, static_folder=PUBLIC_DIR, static_url_path='')
 CORS(app)  # Enable CORS for all routes
 app.config['PROPAGATE_EXCEPTIONS'] = True  # Show full error traces
 
@@ -29,6 +40,35 @@ ZAI_HEADERS = {
 
 # Conversation history (in production, use Redis/database)
 conversations = {}
+
+def get_hotel_context(hotel_id):
+    """Retrieve hotel details and recommendations from SQLite."""
+    try:
+        if not os.path.exists(DB_PATH):
+            return None, []
+            
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Fetch hotel details
+            cursor.execute("SELECT name, knowledge_base FROM hotels WHERE id = ?", (hotel_id,))
+            hotel_row = cursor.fetchone()
+            
+            if not hotel_row:
+                return None, []
+                
+            hotel = dict(hotel_row)
+            
+            # Fetch recommendations
+            cursor.execute("SELECT name, category, description, opening_hours FROM recommendations WHERE hotel_id = ?", (hotel_id,))
+            recs_rows = cursor.fetchall()
+            recommendations = [dict(row) for row in recs_rows]
+            
+            return hotel, recommendations
+    except Exception as e:
+        print(f"Error fetching hotel context: {e}")
+        return None, []
 
 
 def get_user_friendly_error(exception):
@@ -61,9 +101,25 @@ def get_user_friendly_error(exception):
 
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({"status": "ok", "message": "Clawdbot API is running"})
+    """Serve the main frontend page."""
+    return send_from_directory(PUBLIC_DIR, 'index.html')
 
 
+@app.route("/features", methods=["GET"])
+def features():
+    """Redirect to main page (features are now merged)."""
+    return send_from_directory(PUBLIC_DIR, 'index.html')
+
+
+@app.route("/<path:filename>", methods=["GET"])
+def serve_static(filename):
+    """Serve static files from public directory."""
+    if os.path.exists(os.path.join(PUBLIC_DIR, filename)):
+        return send_from_directory(PUBLIC_DIR, filename)
+    return jsonify({"error": "Not found"}), 404
+
+
+@app.route("/health", methods=["GET"])
 @app.route("/api/health", methods=["GET"])
 def health():
     """Health check endpoint to verify API connectivity."""
@@ -85,6 +141,24 @@ def health():
             "api_configured": bool(ZAI_API_KEY),
             "error": str(e)
         }), 503
+
+
+@app.route("/api/hotel/<hotel_id>", methods=["GET"])
+def get_hotel_config(hotel_id):
+    """Get public hotel configuration for the frontend widget."""
+    try:
+        hotel_info, _ = get_hotel_context(hotel_id)
+        if not hotel_info:
+            return jsonify({"error": "Hotel not found"}), 404
+            
+        return jsonify({
+            "name": hotel_info['name'],
+            "description": hotel_info.get('description', 'AI Concierge Service'),
+            # In a real app, these would come from a 'branding' JSON column
+            "theme_color": "#2c3e50" 
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/transcribe", methods=["POST"])
@@ -141,7 +215,7 @@ def transcribe():
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    """Chat with GLM-4.7 via Z.AI API."""
+    """Chat with GLM-4.7 via Z.AI API - Hotel Assistant Mode."""
     try:
         data = request.get_json()
 
@@ -149,17 +223,43 @@ def chat():
             return jsonify({"error": "message required"}), 400
 
         session_id = data.get("session_id", "default")
+        hotel_id = data.get("hotel_id")
         user_message = data["message"]
+
+        # Get hotel context if available
+        hotel_info = None
+        recommendations = []
+        if hotel_id:
+            hotel_info, recommendations = get_hotel_context(hotel_id)
+
+        # Build System Prompt
+        system_prompt = "You are a helpful and professional Hotel Concierge AI."
+        if hotel_info:
+            system_prompt += f"\nYou work at {hotel_info['name']}."
+            if hotel_info['knowledge_base']:
+                system_prompt += f"\n\nHOTEL KNOWLEDGE BASE:\n{hotel_info['knowledge_base']}"
+            
+            if recommendations:
+                rec_text = "\n".join([f"- {r['name']} ({r['category']}): {r['description']}" for r in recommendations])
+                system_prompt += f"\n\nLOCAL RECOMMENDATIONS:\n{rec_text}"
+                
+            system_prompt += "\n\nINSTRUCTIONS:\n"
+            system_prompt += "- Answer questions based ONLY on the provided Knowledge Base and Recommendations.\n"
+            system_prompt += "- If you don't know the answer, politely say you will check with the front desk.\n"
+            system_prompt += "- Be polite, warm, and brief."
+        else:
+            system_prompt += " You are currently in demo mode with no specific hotel data."
 
         # Get or create conversation history
         if session_id not in conversations:
             conversations[session_id] = [{
                 "role": "system",
-                "content": """You are Clawdbot, a helpful voice assistant. 
-                Respond directly and naturally - do NOT show your thinking process or analysis steps.
-                Keep responses very concise (1-2 sentences) since they will be spoken aloud.
-                Be friendly and conversational. Just give the answer, not how you arrived at it."""
+                "content": system_prompt
             }]
+        else:
+            # Update system prompt if it's the first message (in case hotel changed context)
+            if conversations[session_id][0]['role'] == 'system':
+                conversations[session_id][0]['content'] = system_prompt
 
         # Add user message
         conversations[session_id].append({
@@ -167,16 +267,50 @@ def chat():
             "content": user_message
         })
 
+        # Tools definition
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "request_late_checkout",
+                    "description": "Request a late checkout for the guest.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "time": {"type": "string", "description": "Requested time (e.g. 2:00 PM)"},
+                            "reason": {"type": "string", "description": "Reason (optional)"}
+                        },
+                        "required": ["time"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "contact_front_desk",
+                    "description": "Escalate complex issues or requests to human staff.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "issue": {"type": "string", "description": "Description of the issue or request"}
+                        },
+                        "required": ["issue"]
+                    }
+                }
+            }
+        ]
+
         # Call GLM-4.7 via Z.AI API
         print(f"Calling GLM-4.7 API for session {session_id}...")
         
         payload = {
             "model": "glm-4.7",
             "messages": conversations[session_id],
-            "temperature": 0.95,
+            "temperature": 0.7, 
             "top_p": 0.7,
-            "max_tokens": 150,
-            "stream": False
+            "max_tokens": 500,
+            "stream": False,
+            "tools": tools
         }
         
         response = requests.post(
@@ -192,21 +326,52 @@ def chat():
             result = response.json()
             message = result["choices"][0]["message"]
             
-            # GLM-4.7 returns reasoning_content (with thinking) and content (final answer)
-            # Content is often empty, so we need to extract the final answer from reasoning
+            # Handle Tool Calls
+            tool_calls = message.get("tool_calls")
+            if tool_calls:
+                # Append assistant message with tool calls to history
+                conversations[session_id].append(message)
+                
+                for tool_call in tool_calls:
+                    function_name = tool_call['function']['name']
+                    args = json.loads(tool_call['function']['arguments'])
+                    print(f"Tool Executed: {function_name} with {args}")
+                    
+                    # Mock execution result
+                    tool_result = f"Request received for {function_name}. Staff notified."
+                    if function_name == "request_late_checkout":
+                         # In a real app, you'd insert into DB here
+                        tool_result = f"Late checkout request for {args.get('time')} confirmed. Cost is €50. Added to bill."
+                    
+                    conversations[session_id].append({
+                        "role": "tool",
+                        "tool_call_id": tool_call['id'],
+                        "content": tool_result
+                    })
+                
+                # Follow-up call to get final answer
+                payload["messages"] = conversations[session_id]
+                del payload["tools"] # Don't loop infinitely
+                
+                follow_up = requests.post(
+                    f"{ZAI_BASE_URL}/paas/v4/chat/completions",
+                    headers=ZAI_HEADERS, json=payload, timeout=30.0
+                )
+                
+                if follow_up.status_code == 200:
+                    message = follow_up.json()["choices"][0]["message"]
+                    # fall through to normal processing
+
+            # GLM-4.7 logic for content vs reasoning
             reasoning = message.get("reasoning_content", "")
             content = message.get("content", "")
             
-            # If content is empty, try to extract final answer from reasoning
             if not content and reasoning:
-                # Look for patterns like "Final answer:", "Response:", etc.
                 import re
-                # Try to find quoted text at the end (common pattern for final answers)
                 quotes = re.findall(r'"([^"]+)"', reasoning)
                 if quotes:
-                    assistant_message = quotes[-1]  # Take the last quoted text
+                    assistant_message = quotes[-1]
                 else:
-                    # If no quotes, take the last line or paragraph
                     lines = [l.strip() for l in reasoning.split('\n') if l.strip()]
                     assistant_message = lines[-1] if lines else reasoning[:200]
             else:
@@ -551,4 +716,8 @@ def generate_video():
 handler = app
 
 if __name__ == "__main__":
-    app.run(debug=True, port=3000)
+    print(f"📁 Serving static files from: {PUBLIC_DIR}")
+    print(f"🌐 Frontend: http://localhost:8000")
+    print(f"🌐 Features: http://localhost:8000/features")
+    print(f"📡 API Docs: http://localhost:8000/api/health")
+    app.run(debug=True, host='0.0.0.0', port=8000)
