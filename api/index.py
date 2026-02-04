@@ -10,6 +10,9 @@ import traceback
 import sqlite3
 import json
 import requests
+import logging
+import uuid
+from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -21,6 +24,21 @@ load_dotenv()
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIR = os.path.join(PROJECT_ROOT, 'public')
 DB_PATH = os.path.join(PROJECT_ROOT, 'hotel_assistant.db')
+LOG_FILE = os.path.join(PROJECT_ROOT, 'server.log')
+
+# Setup Logging
+logger = logging.getLogger("HotelAssistant")
+logger.setLevel(logging.INFO)
+
+# File Handler (Rotates after 10MB)
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=10000000, backupCount=5)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s'))
+logger.addHandler(file_handler)
+
+# Console Handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s'))
+logger.addHandler(console_handler)
 
 app = Flask(__name__, static_folder=PUBLIC_DIR, static_url_path='')
 CORS(app)  # Enable CORS for all routes
@@ -37,6 +55,12 @@ ZAI_HEADERS = {
     "Content-Type": "application/json",
     "Accept-Language": "en-US,en"
 }
+
+# Model Configuration - can be overridden via env var
+ZAI_CHAT_MODEL = os.getenv("ZAI_CHAT_MODEL", "glm-4.7")  # Default: glm-4.7
+
+# Demo/Mock mode for when API balance is low
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 # Conversation history (in production, use Redis/database)
 conversations = {}
@@ -89,14 +113,78 @@ def get_user_friendly_error(exception):
     if 'APIConnectionError' in error_type:
         return "🌐 Network connection error. Please check your internet and try again."
     
-    if 'RateLimitError' in error_type:
-        return "⚠️ Too many requests. Please wait a moment and try again."
+    if 'RateLimitError' in error_type or '429' in error_str or '1113' in error_str:
+        return "⚠️ API quota exceeded. Running in demo mode."
     
     if 'InvalidRequestError' in error_type:
         return "❌ Invalid request. Please try rephrasing your message."
     
     # Generic fallback
     return f"⚠️ Something went wrong: {error_str[:100]}. Please try again."
+
+
+def generate_demo_response(user_message, hotel_info=None, recommendations=None):
+    """Generate a demo response when the API is unavailable (balance low, etc)."""
+    msg_lower = user_message.lower()
+    
+    # Knowledge base queries
+    if any(word in msg_lower for word in ['breakfast', 'morning', 'eat']):
+        if hotel_info and hotel_info.get('knowledge_base'):
+            kb = hotel_info['knowledge_base']
+            # Extract breakfast info if present
+            if 'breakfast' in kb.lower():
+                import re
+                match = re.search(r'breakfast[^.]*\.', kb, re.IGNORECASE)
+                if match:
+                    return f"📋 {match.group(0)} [Demo Mode]"
+        return "Breakfast is typically served from 7:00 AM to 10:30 AM in our main dining room. [Demo Mode]"
+    
+    if any(word in msg_lower for word in ['wifi', 'internet', 'password']):
+        return "The WiFi network is 'GrandBudapest_Guest' and the password is available at the front desk. [Demo Mode]"
+    
+    if any(word in msg_lower for word in ['checkout', 'check out', 'late']):
+        return "Standard checkout is at 11:00 AM. Late checkout can be arranged for an additional fee - would you like me to request that? [Demo Mode]"
+    
+    if any(word in msg_lower for word in ['pool', 'gym', 'spa', 'fitness']):
+        return "Our pool and fitness center are located on the 3rd floor and are open from 6:00 AM to 10:00 PM. [Demo Mode]"
+    
+    if any(word in msg_lower for word in ['restaurant', 'food', 'dining', 'dinner', 'lunch']):
+        if recommendations:
+            rec = next((r for r in recommendations if r['category'] == 'restaurant'), None)
+            if rec:
+                return f"I recommend {rec['name']}: {rec['description']} [Demo Mode]"
+        return "We have excellent dining options available. The main restaurant serves lunch from 12-3 PM and dinner from 6-10 PM. [Demo Mode]"
+    
+    if any(word in msg_lower for word in ['hello', 'hi', 'hey', 'good morning', 'good evening']):
+        hotel_name = hotel_info['name'] if hotel_info else "our hotel"
+        return f"Hello! Welcome to {hotel_name}. How may I assist you today? [Demo Mode]"
+    
+    # Default response
+    return f"Thank you for your question. In demo mode, I can help with common queries about breakfast times, WiFi, checkout, and local recommendations. [Demo Mode]"
+
+
+@app.route("/api/logs", methods=["POST"])
+def client_logs():
+    """Receive logs from the frontend."""
+    try:
+        data = request.get_json()
+        log_level = data.get("level", "info").lower()
+        message = data.get("message", "No message")
+        context = data.get("context", {})
+        
+        log_msg = f"[FRONTEND] {message} | Context: {json.dumps(context)}"
+        
+        if log_level == "error":
+            logger.error(log_msg)
+        elif log_level == "warn":
+            logger.warning(log_msg)
+        else:
+            logger.info(log_msg)
+            
+        return jsonify({"status": "logged"})
+    except Exception as e:
+        logger.error(f"Failed to process client log: {e}")
+        return jsonify({"error": "Logging failed"}), 500
 
 
 @app.route("/", methods=["GET"])
@@ -392,6 +480,21 @@ def chat():
         else:
             error_detail = response.text
             print(f"API Error: {error_detail}")
+            
+            # Check for balance/quota errors - use demo mode as fallback
+            if response.status_code in [429, 402] or '1113' in error_detail or 'Insufficient balance' in error_detail:
+                print("API balance insufficient - falling back to demo mode")
+                demo_response = generate_demo_response(user_message, hotel_info, recommendations)
+                conversations[session_id].append({
+                    "role": "assistant",
+                    "content": demo_response
+                })
+                return jsonify({
+                    "response": demo_response,
+                    "success": True,
+                    "demo_mode": True
+                })
+            
             return jsonify({
                 "error": f"API error: {response.status_code}",
                 "success": False
@@ -716,8 +819,11 @@ def generate_video():
 handler = app
 
 if __name__ == "__main__":
+    import sys
+    debug_mode = os.environ.get('FLASK_DEBUG', '1') == '1'
     print(f"📁 Serving static files from: {PUBLIC_DIR}")
     print(f"🌐 Frontend: http://localhost:8000")
     print(f"🌐 Features: http://localhost:8000/features")
     print(f"📡 API Docs: http://localhost:8000/api/health")
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    print(f"🔧 Debug mode: {'ON' if debug_mode else 'OFF'}")
+    app.run(debug=debug_mode, host='0.0.0.0', port=8000, use_reloader=debug_mode)

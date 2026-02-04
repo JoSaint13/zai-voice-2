@@ -107,3 +107,5 @@ Traceback (most recent call last):
   File "/Users/andreyzherditskiy/work/zai-voice-2/api/index.py", line 13, in <module>
     from dotenv import load_dotenv
 ModuleNotFoundError: No module named 'dotenv'
+2026-02-04 01:34:42,040 - [ERROR] - [FRONTEND] TEST_LOGGING_MESSAGE - This is a simulated frontend error | Context: {"test_run": true}
+2026-02-04 11:16:14,604 - [ERROR] - [FRONTEND] TEST_LOGGING_MESSAGE - This is a simulated frontend error | Context: {"test_run": true}

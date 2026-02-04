@@ -1,0 +1,18 @@
+📁 Serving static files from: /Users/andreyzherditskiy/work/zai-voice-2/public
+🌐 Frontend: http://localhost:8000
+🌐 Features: http://localhost:8000/features
+📡 API Docs: http://localhost:8000/api/health
+ * Serving Flask app 'index'
+ * Debug mode: on
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://192.168.250.143:8000
+[33mPress CTRL+C to quit[0m
+ * Restarting with stat
+📁 Serving static files from: /Users/andreyzherditskiy/work/zai-voice-2/public
+🌐 Frontend: http://localhost:8000
+🌐 Features: http://localhost:8000/features
+📡 API Docs: http://localhost:8000/api/health
+ * Debugger is active!
+ * Debugger PIN: 954-619-189

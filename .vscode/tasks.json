@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Hotel Assistant Server",
+			"type": "shell",
+			"command": "cd /Users/andreyzherditskiy/work/zai-voice-2 && FLASK_DEBUG=0 /Users/andreyzherditskiy/work/zai-voice-2/.venv/bin/python api/index.py",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Hotel Assistant Server",
+			"type": "shell",
+			"command": "cd /Users/andreyzherditskiy/work/zai-voice-2 && FLASK_DEBUG=0 /Users/andreyzherditskiy/work/zai-voice-2/.venv/bin/python api/index.py",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

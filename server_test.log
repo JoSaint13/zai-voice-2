@@ -1,0 +1,8 @@
+📁 Serving static files from: /Users/andreyzherditskiy/work/zai-voice-2/public
+🌐 Frontend: http://localhost:8000
+🌐 Features: http://localhost:8000/features
+📡 API Docs: http://localhost:8000/api/health
+ * Serving Flask app 'index'
+ * Debug mode: on
+Address already in use
+Port 8000 is in use by another program. Either identify and stop that program, or start the server with a different port.

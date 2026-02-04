@@ -112,12 +112,58 @@
             btn: document.getElementById('sendBtn'),
             status: document.getElementById('status')
         };
+        
+        // --- Logging System ---
+        const Logger = {
+            async log(level, message, context = {}) {
+                // Always log to console locally
+                const logFn = console[level] || console.log;
+                logFn(`[${level.toUpperCase()}] ${message}`, context);
+                
+                // Send to backend
+                try {
+                    await fetch('/api/logs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            level, 
+                            message, 
+                            context: { 
+                                ...context, 
+                                sessionId, 
+                                hotelId: HOTEL_ID,
+                                url: window.location.href,
+                                userAgent: navigator.userAgent
+                            } 
+                        })
+                    });
+                } catch (e) {
+                    // Fail silently if logger is down to avoid loops
+                    console.warn("Failed to send log to server", e);
+                }
+            },
+            info(msg, ctx) { this.log('info', msg, ctx); },
+            error(msg, ctx) { 
+                this.log('error', msg, ctx); 
+                alert(`Error: ${msg}\nSee reference: server.log`); // Simple visual feedback for MVP
+            }
+        };
+
+        // Capture Uncaught Errors
+        window.onerror = function(msg, url, line, col, error) {
+            Logger.error("Global Error: " + msg, { url, line, col, stack: error?.stack });
+        };
+        window.onunhandledrejection = function(event) {
+            Logger.error("Unhandled Rejection: " + (event.reason?.message || event.reason), { stack: event.reason?.stack });
+        };
+        // ----------------------
 
         // Initialize
         async function init() {
             try {
+                Logger.info("Initializing Hotel Assistant...");
                 const res = await fetch(`/api/hotel/${HOTEL_ID}`);
-                if (!res.ok) throw new Error("Hotel not found");
+                if (!res.ok) throw new Error("Hotel not found: " + res.status);
                 const config = await res.json();
                 
                 // Apply branding
@@ -135,8 +181,9 @@
                 }
                 
                 addMessage('assistant', `Welcome to ${config.name}. How can I assist you today?`);
+                Logger.info("Initialization complete", { hotelName: config.name });
             } catch (e) {
-                console.error(e);
+                Logger.error("Initialization failed", { error: e.message });
                 ui.name.textContent = "Error";
                 ui.desc.textContent = "Could not load hotel data";
             }
@@ -148,6 +195,34 @@
             
             ui.input.value = '';
             addMessage('user', text);
+            ui.status.textContent = 'Concierge is typing...';
+
+            try {
+                const response = await fetch(`/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: text, 
+                        session_id: sessionId,
+                        hotel_id: HOTEL_ID 
+                    })
+                });
+                
+                const data = await response.json();
+                ui.status.textContent = '';
+                
+                if (data.success) {
+                    addMessage('assistant', data.response);
+                } else {
+                    Logger.error("API Error in Chat", data);
+                    addMessage('assistant', "I'm having trouble connecting right now.");
+                }
+            } catch (err) {
+                Logger.error("Network Error in Chat", { error: err.message });
+                ui.status.textContent = '';
+                addMessage('assistant', "Connection error.");
+            }
+        }
             ui.status.textContent = 'Concierge is typing...';
 
             try {
