@@ -12,7 +12,9 @@ from zhipuai import ZhipuAI
 app = Flask(__name__)
 
 # Initialize ZhipuAI client
-ZHIPU_API_KEY = os.getenv("ZHIPUAI_API_KEY", "507b2d0bb71945aab07c0e22bc666d4a.RiY1d2GYmM0Eodp3")
+ZHIPU_API_KEY = os.getenv("ZHIPUAI_API_KEY")
+if not ZHIPU_API_KEY:
+    raise ValueError("ZHIPUAI_API_KEY environment variable is required")
 client = ZhipuAI(api_key=ZHIPU_API_KEY)
 
 # Conversation history (in production, use Redis/database)
