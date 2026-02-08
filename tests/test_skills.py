@@ -1,5 +1,5 @@
 """
-Tests for Clawdbot skill system and intent routing.
+Tests for NomadAI skill system and intent routing.
 
 Tests cover:
 - Skill base class interface
@@ -8,13 +8,14 @@ Tests cover:
 - Skill integration with chat system
 """
 
+import re
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from abc import ABC, abstractmethod
 
 
 class SkillBase(ABC):
-    """Base class for all Clawdbot skills."""
+    """Base class for all NomadAI skills."""
 
     def __init__(self, name: str, intents: list):
         """
@@ -43,9 +44,14 @@ class SkillBase(ABC):
         pass
 
     def matches(self, user_input: str) -> bool:
-        """Check if this skill can handle the input."""
+        """Check if this skill can handle the input using word boundary matching."""
         user_lower = user_input.lower()
-        return any(intent.lower() in user_lower for intent in self.intents)
+        for intent in self.intents:
+            # Use word boundary matching to avoid false positives
+            pattern = r'\b' + re.escape(intent.lower()) + r'\b'
+            if re.search(pattern, user_lower):
+                return True
+        return False
 
 
 class IntentRouter:
