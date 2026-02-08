@@ -1,68 +1,153 @@
-# Clawdbot
+# NomadAI Voice Agent
 
-Voice assistant powered by Z.AI's GLM-ASR + GLM-4.7 stack.
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Status](https://img.shields.io/badge/status-MVP-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## Features
+> Voice-first hotel smart assistant powered by Z.AI
 
-- **Speech Recognition**: GLM-ASR-2512 (cloud) or GLM-ASR-Nano-2512 (local)
-- **Conversation**: GLM-4.7 for intelligent responses
-- **Text-to-Speech**: Browser-native TTS
-- **Deployment**: Vercel-ready
+**[Documentation](docs/INDEX.md)** | **[Changelog](CHANGELOG.md)** | **[Roadmap](docs/ROADMAP.md)**
+
+---
+
+## What is NomadAI?
+
+NomadAI is an AI-powered voice assistant for hotels that combines:
+- **Digital Concierge**: Room service, housekeeping, check-in/out
+- **Sightseeing Expert**: Local recommendations, itineraries, bookings
+- **Media Generation**: Destination previews with AI images/videos
+
+## Tech Stack
+
+| Component | Model | Purpose |
+|-----------|-------|---------|
+| Speech Recognition | GLM-ASR-2512 | 20+ languages, dialect support |
+| Conversation | GLM-4.7 | Intelligent responses |
+| Image Generation | CogView-4 | Destination previews |
+| Video Generation | CogVideoX | Tour videos |
+
+---
 
 ## Quick Start
 
 ### Web (Vercel)
 
-1. Deploy to Vercel
-2. Set environment variable: `ZHIPUAI_API_KEY`
-3. Open the deployed URL
-
-### Local CLI
-
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Deploy
+vercel --prod
 
 # Set API key
+vercel env add ZHIPUAI_API_KEY
+```
+
+### Local
+
+```bash
+# Install
+pip install -r requirements.txt
+
+# Configure
 export ZHIPUAI_API_KEY='your_key_here'
 
 # Run
-python clawdbot.py
+python api/index.py
+
+# Open http://localhost:3000
 ```
 
-## Architecture
+---
 
-```
-[User Speech] → GLM-ASR-2512 → [Text] → GLM-4.7 → [Response] → TTS → [Audio]
-```
+## Features
 
-## API Endpoints
+### Voice Skills (18 total)
+
+| Category | Skills |
+|----------|--------|
+| **Concierge** | Room service, housekeeping, amenities, WiFi, check-out, complaints, wake-up, billing |
+| **Sightseeing** | Recommendations, itinerary, directions, events, booking, translation |
+| **Media** | Image preview, video tour |
+| **System** | Language switch, human handoff, repeat, slow down, reset |
+
+### API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/transcribe` | POST | Transcribe audio to text |
-| `/api/chat` | POST | Chat with GLM-4.7 |
-| `/api/voice-chat` | POST | Combined transcribe + chat |
-| `/api/reset` | POST | Reset conversation |
+| `/api/transcribe` | POST | Audio → Text |
+| `/api/chat` | POST | Text → Response |
+| `/api/voice-chat` | POST | Audio → Response |
+| `/api/reset` | POST | Clear session |
 
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ZHIPUAI_API_KEY` | Yes | Z.AI API key from [open.z.ai](https://open.z.ai) |
+---
 
 ## Project Structure
 
 ```
-├── api/
-│   ├── index.py          # Flask API for Vercel
-│   └── requirements.txt  # API dependencies
-├── public/
-│   └── index.html        # Web UI
-├── clawdbot.py           # CLI version
-├── requirements.txt      # CLI dependencies
-└── vercel.json           # Vercel config
+zai-voice-2/
+├── api/index.py           # Flask API
+├── public/index.html      # Web UI
+├── src/skills/            # Skill implementations
+│   ├── base.py            # BaseSkill, Registry
+│   ├── concierge.py       # Hotel services
+│   ├── sightseeing.py     # Local exploration
+│   └── media.py           # Image/video generation
+├── tests/                 # Test suite
+├── scripts/demo.py        # Pipeline demo
+├── docs/                  # Documentation
+│   ├── PRD.md             # Product requirements
+│   ├── ARCHITECTURE.md    # System design
+│   ├── ROADMAP.md         # Implementation plan
+│   └── TEAM.md            # Team composition
+├── CHANGELOG.md           # Version history
+└── VERSION                # Current version
 ```
+
+---
+
+## Documentation
+
+| Document | Audience |
+|----------|----------|
+| [PRD](docs/PRD.md) | Product/Business |
+| [Architecture](docs/ARCHITECTURE.md) | Engineers |
+| [Developer Guide](docs/readers/DEVELOPER.md) | Developers |
+| [Operations Guide](docs/readers/OPERATIONS.md) | DevOps |
+| [Business Overview](docs/readers/BUSINESS.md) | Stakeholders |
+
+---
+
+## Roadmap
+
+| Phase | Status | Timeline |
+|-------|--------|----------|
+| Foundation | ✅ Done | Week 1-2 |
+| Skill Implementation | ⏳ In Progress | Week 3-4 |
+| PMS Integration | 📋 Planned | Month 2 |
+| Omnichannel | 📋 Planned | Month 3 |
+| Revenue Optimization | 📋 Planned | Month 4 |
+
+See [ROADMAP.md](docs/ROADMAP.md) for details.
+
+---
+
+## Team
+
+| Agent | Model | Role |
+|-------|-------|------|
+| Brain | Opus 4.5 | Architecture, strategy |
+| Dev | Sonnet 4.5 | Implementation |
+| Runner | Haiku 4.5 | Testing, validation |
+
+See [TEAM.md](docs/TEAM.md) for details.
+
+---
+
+## Version
+
+**Current:** `0.1.0` (2026-02-08)
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+---
 
 ## License
 

@@ -2,118 +2,174 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clawdbot - Voice Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>NomadAI - Voice Assistant</title>
     <style>
+        :root {
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
+            --primary: #00d4ff;
+            --primary-dark: #0077b6;
+            --accent: #7b2cbf;
+            --accent-dark: #5a189a;
+            --danger: #ff4757;
+            --bg-dark: #1a1a2e;
+            --bg-darker: #16213e;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
             color: #fff;
+            display: flex;
+            flex-direction: column;
         }
 
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding-top: var(--safe-top);
+            padding-bottom: var(--safe-bottom);
+            padding-left: var(--safe-left);
+            padding-right: var(--safe-right);
         }
 
+        /* Header - Optimized for mobile */
         header {
             text-align: center;
-            padding: 40px 0;
+            padding: 16px 16px 12px;
+            flex-shrink: 0;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .version-badge {
+            font-size: 0.65rem;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 6px;
+            border-radius: 8px;
+            color: #888;
         }
 
         .subtitle {
             color: #888;
-            font-size: 1rem;
+            font-size: 0.8rem;
+            margin-top: 4px;
         }
 
+        /* Chat Container - Flexible height */
         .chat-container {
-            background: rgba(255, 255, 255, 0.05);
+            flex: 1;
+            background: rgba(255, 255, 255, 0.03);
+            margin: 0 12px;
             border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
-            min-height: 400px;
-            max-height: 500px;
+            padding: 16px;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
         }
 
         .message {
-            margin-bottom: 15px;
-            padding: 12px 16px;
-            border-radius: 12px;
+            margin-bottom: 12px;
+            padding: 12px 14px;
+            border-radius: 16px;
             max-width: 85%;
-            animation: fadeIn 0.3s ease;
+            animation: fadeIn 0.25s ease;
+            font-size: 0.95rem;
+            line-height: 1.4;
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .message.user {
-            background: linear-gradient(135deg, #7b2cbf, #5a189a);
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
             margin-left: auto;
-            text-align: right;
+            border-bottom-right-radius: 4px;
         }
 
         .message.assistant {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
+            border-bottom-left-radius: 4px;
         }
 
         .message .label {
-            font-size: 0.75rem;
-            color: #aaa;
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.5);
             margin-bottom: 4px;
+            font-weight: 500;
         }
 
-        .message.user .label {
-            color: #ddd;
+        /* Controls - Fixed at bottom, thumb-friendly */
+        .controls-wrapper {
+            flex-shrink: 0;
+            padding: 12px;
+            background: linear-gradient(to top, var(--bg-darker) 0%, transparent 100%);
         }
 
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
+        /* Large Mic Button - Easy to tap */
         .record-btn {
-            flex: 1;
-            padding: 20px;
-            font-size: 1.1rem;
+            width: 100%;
+            min-height: 64px;
+            font-size: 1rem;
+            font-weight: 600;
             border: none;
-            border-radius: 15px;
+            border-radius: 16px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
+            touch-action: manipulation;
         }
 
         .record-btn.idle {
-            background: linear-gradient(135deg, #00d4ff, #0077b6);
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
             color: white;
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
         }
 
         .record-btn.recording {
-            background: linear-gradient(135deg, #ff4757, #c0392b);
+            background: linear-gradient(135deg, var(--danger), #c0392b);
             color: white;
-            animation: pulse 1s infinite;
+            animation: pulse 0.8s infinite;
+            box-shadow: 0 4px 20px rgba(255, 71, 87, 0.4);
         }
 
         @keyframes pulse {
@@ -121,28 +177,29 @@
             50% { transform: scale(1.02); }
         }
 
-        .record-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        .record-btn:active {
+            transform: scale(0.98);
         }
 
-        .record-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
+        .mic-icon {
+            width: 28px;
+            height: 28px;
         }
 
+        /* Text Input Row */
         .text-input-container {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            margin-top: 10px;
         }
 
         .text-input {
             flex: 1;
-            padding: 15px;
+            min-height: 48px;
+            padding: 0 16px;
             border: none;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.08);
             color: white;
             font-size: 1rem;
         }
@@ -151,189 +208,329 @@
             color: #666;
         }
 
-        .send-btn {
-            padding: 15px 25px;
-            background: linear-gradient(135deg, #7b2cbf, #5a189a);
-            border: none;
-            border-radius: 10px;
-            color: white;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .text-input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.12);
         }
 
-        .send-btn:hover {
-            transform: translateY(-2px);
+        .send-btn {
+            min-width: 64px;
+            min-height: 48px;
+            padding: 0 20px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .send-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* Reset & Status */
+        .footer-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+            gap: 12px;
         }
 
         .reset-btn {
-            width: 100%;
-            padding: 12px;
+            min-height: 40px;
+            padding: 0 16px;
             background: transparent;
             border: 1px solid #444;
             border-radius: 10px;
             color: #888;
+            font-size: 0.85rem;
             cursor: pointer;
-            margin-top: 10px;
-            transition: all 0.3s ease;
+            touch-action: manipulation;
         }
 
-        .reset-btn:hover {
-            border-color: #ff4757;
-            color: #ff4757;
+        .reset-btn:active {
+            border-color: var(--danger);
+            color: var(--danger);
         }
 
         .status {
-            text-align: center;
-            padding: 10px;
-            color: #888;
-            font-size: 0.9rem;
+            flex: 1;
+            text-align: right;
+            color: #666;
+            font-size: 0.8rem;
         }
 
         .status.error {
-            color: #ff4757;
+            color: var(--danger);
         }
 
-        .mic-icon {
-            width: 24px;
-            height: 24px;
+        /* Recording indicator */
+        .recording-indicator {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 0;
+        }
+
+        .recording-indicator.active {
+            display: flex;
+        }
+
+        .recording-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--danger);
+            border-radius: 50%;
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .recording-text {
+            color: var(--danger);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        /* Landscape mode adjustments */
+        @media (orientation: landscape) and (max-height: 500px) {
+            header {
+                padding: 8px 16px;
+            }
+            h1 {
+                font-size: 1.3rem;
+            }
+            .subtitle {
+                display: none;
+            }
+            .chat-container {
+                margin: 0 8px;
+                padding: 10px;
+            }
+            .message {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+            .controls-wrapper {
+                padding: 8px;
+            }
+            .record-btn {
+                min-height: 50px;
+            }
+        }
+
+        /* Galaxy S21 FE specific (1080x2340) */
+        @media (min-width: 360px) and (max-width: 420px) {
+            .chat-container {
+                margin: 0 10px;
+            }
+            .record-btn {
+                min-height: 68px;
+            }
+            .message {
+                max-width: 88%;
+            }
+        }
+
+        /* Larger phones */
+        @media (min-width: 420px) {
+            .app {
+                max-width: 480px;
+                margin: 0 auto;
+            }
+        }
+
+        /* Desktop */
+        @media (min-width: 768px) {
+            .app {
+                max-width: 600px;
+                padding: 20px;
+            }
+            header {
+                padding: 24px;
+            }
+            h1 {
+                font-size: 2.2rem;
+            }
+            .record-btn {
+                min-height: 72px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="app">
         <header>
-            <h1>Clawdbot</h1>
-            <p class="subtitle">Powered by Z.AI GLM-ASR + GLM-4.7</p>
+            <div class="logo-container">
+                <h1>NomadAI</h1>
+                <span class="version-badge">v0.1.0</span>
+            </div>
+            <p class="subtitle">Voice-first hotel assistant</p>
         </header>
 
         <div class="chat-container" id="chatContainer">
             <div class="message assistant">
-                <div class="label">Clawdbot</div>
-                <div>Hello! I'm Clawdbot. Click the microphone to speak, or type a message below.</div>
+                <div class="label">NomadAI</div>
+                <div>Hello! I'm your hotel assistant. Hold the mic button to speak, or type below.</div>
             </div>
         </div>
 
-        <div class="controls">
-            <button class="record-btn idle" id="recordBtn" onclick="toggleRecording()">
+        <div class="controls-wrapper">
+            <div class="recording-indicator" id="recordingIndicator">
+                <span class="recording-dot"></span>
+                <span class="recording-text">Listening...</span>
+            </div>
+
+            <button class="record-btn idle" id="recordBtn">
                 <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/>
                 </svg>
                 <span id="recordText">Hold to Speak</span>
             </button>
+
+            <div class="text-input-container">
+                <input type="text" class="text-input" id="textInput" placeholder="Type a message..." enterkeyhint="send">
+                <button class="send-btn" id="sendBtn">Send</button>
+            </div>
+
+            <div class="footer-row">
+                <button class="reset-btn" id="resetBtn">Reset</button>
+                <div class="status" id="status">Ready</div>
+            </div>
         </div>
-
-        <div class="text-input-container">
-            <input type="text" class="text-input" id="textInput" placeholder="Or type a message..." onkeypress="handleKeyPress(event)">
-            <button class="send-btn" onclick="sendTextMessage()">Send</button>
-        </div>
-
-        <button class="reset-btn" onclick="resetConversation()">Reset Conversation</button>
-
-        <div class="status" id="status"></div>
     </div>
 
     <script>
+        // Elements
+        const recordBtn = document.getElementById('recordBtn');
+        const recordText = document.getElementById('recordText');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const chatContainer = document.getElementById('chatContainer');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const status = document.getElementById('status');
+
+        // State
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
         const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
 
-        const recordBtn = document.getElementById('recordBtn');
-        const recordText = document.getElementById('recordText');
-        const chatContainer = document.getElementById('chatContainer');
-        const textInput = document.getElementById('textInput');
-        const status = document.getElementById('status');
+        // Haptic feedback
+        function vibrate(pattern = 10) {
+            if (navigator.vibrate) {
+                navigator.vibrate(pattern);
+            }
+        }
 
         // Initialize media recorder
         async function initMediaRecorder() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : 'audio/webm';
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType });
 
                 mediaRecorder.ondataavailable = (event) => {
-                    audioChunks.push(event.data);
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
                 };
 
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioBlob = new Blob(audioChunks, { type: mimeType });
                     audioChunks = [];
                     await sendAudioToAPI(audioBlob);
                 };
 
-                setStatus('Ready to record');
+                setStatus('Ready');
             } catch (err) {
-                setStatus('Microphone access denied', true);
+                setStatus('Mic access denied', true);
                 recordBtn.disabled = true;
             }
         }
 
-        function toggleRecording() {
-            if (!mediaRecorder) {
-                initMediaRecorder();
-                return;
-            }
-
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
-            }
-        }
-
         function startRecording() {
+            if (!mediaRecorder || mediaRecorder.state !== 'inactive') return;
+
             audioChunks = [];
             mediaRecorder.start();
             isRecording = true;
+            vibrate(15);
+
             recordBtn.className = 'record-btn recording';
             recordText.textContent = 'Release to Send';
-            setStatus('Recording...');
+            recordingIndicator.classList.add('active');
+            setStatus('Listening...');
         }
 
         function stopRecording() {
+            if (!isRecording) return;
+
             mediaRecorder.stop();
             isRecording = false;
+            vibrate([10, 50, 10]);
+
             recordBtn.className = 'record-btn idle';
             recordText.textContent = 'Hold to Speak';
+            recordingIndicator.classList.remove('active');
             setStatus('Processing...');
         }
 
-        // Mouse/touch events for hold-to-record
-        recordBtn.addEventListener('mousedown', () => {
-            if (mediaRecorder && mediaRecorder.state === 'inactive') {
-                startRecording();
-            }
-        });
-
-        recordBtn.addEventListener('mouseup', () => {
-            if (isRecording) {
-                stopRecording();
-            }
-        });
-
-        recordBtn.addEventListener('mouseleave', () => {
-            if (isRecording) {
-                stopRecording();
-            }
-        });
-
-        // Touch events for mobile
+        // Touch events for hold-to-record
         recordBtn.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if (mediaRecorder && mediaRecorder.state === 'inactive') {
+            if (!mediaRecorder) {
+                initMediaRecorder().then(() => startRecording());
+            } else {
                 startRecording();
             }
-        });
+        }, { passive: false });
 
         recordBtn.addEventListener('touchend', (e) => {
             e.preventDefault();
-            if (isRecording) {
-                stopRecording();
+            stopRecording();
+        }, { passive: false });
+
+        recordBtn.addEventListener('touchcancel', (e) => {
+            stopRecording();
+        });
+
+        // Mouse events for desktop
+        recordBtn.addEventListener('mousedown', () => {
+            if (!mediaRecorder) {
+                initMediaRecorder().then(() => startRecording());
+            } else {
+                startRecording();
             }
         });
 
+        recordBtn.addEventListener('mouseup', stopRecording);
+        recordBtn.addEventListener('mouseleave', () => {
+            if (isRecording) stopRecording();
+        });
+
+        // Send audio to API
         async function sendAudioToAPI(audioBlob) {
             try {
-                // Convert to base64
                 const reader = new FileReader();
                 reader.readAsDataURL(audioBlob);
 
@@ -354,8 +551,9 @@
                     if (data.success) {
                         addMessage('user', data.transcription);
                         addMessage('assistant', data.response);
-                        setStatus('');
+                        setStatus('Ready');
                         speakResponse(data.response);
+                        vibrate(10);
                     } else {
                         setStatus('Error: ' + data.error, true);
                     }
@@ -365,11 +563,13 @@
             }
         }
 
+        // Send text message
         async function sendTextMessage() {
             const message = textInput.value.trim();
             if (!message) return;
 
             textInput.value = '';
+            textInput.blur();
             addMessage('user', message);
             setStatus('Thinking...');
 
@@ -387,7 +587,7 @@
 
                 if (data.success) {
                     addMessage('assistant', data.response);
-                    setStatus('');
+                    setStatus('Ready');
                     speakResponse(data.response);
                 } else {
                     setStatus('Error: ' + data.error, true);
@@ -397,17 +597,42 @@
             }
         }
 
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
+        // Event listeners
+        sendBtn.addEventListener('click', sendTextMessage);
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
                 sendTextMessage();
             }
-        }
+        });
 
+        resetBtn.addEventListener('click', async () => {
+            vibrate(10);
+            try {
+                await fetch('/api/reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+
+                chatContainer.innerHTML = `
+                    <div class="message assistant">
+                        <div class="label">NomadAI</div>
+                        <div>Conversation reset. How can I help you?</div>
+                    </div>
+                `;
+                setStatus('Ready');
+            } catch (err) {
+                setStatus('Error resetting', true);
+            }
+        });
+
+        // UI helpers
         function addMessage(role, text) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
             messageDiv.innerHTML = `
-                <div class="label">${role === 'user' ? 'You' : 'Clawdbot'}</div>
+                <div class="label">${role === 'user' ? 'You' : 'NomadAI'}</div>
                 <div>${text}</div>
             `;
             chatContainer.appendChild(messageDiv);
@@ -420,8 +645,8 @@
         }
 
         function speakResponse(text) {
-            // Use browser TTS
             if ('speechSynthesis' in window) {
+                speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = 1.0;
                 utterance.pitch = 1.0;
@@ -429,28 +654,14 @@
             }
         }
 
-        async function resetConversation() {
-            try {
-                await fetch('/api/reset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-
-                chatContainer.innerHTML = `
-                    <div class="message assistant">
-                        <div class="label">Clawdbot</div>
-                        <div>Conversation reset. How can I help you?</div>
-                    </div>
-                `;
-                setStatus('Conversation reset');
-            } catch (err) {
-                setStatus('Error resetting', true);
-            }
-        }
-
-        // Initialize on load
+        // Initialize
         initMediaRecorder();
+
+        // Prevent pull-to-refresh on mobile
+        document.body.addEventListener('touchmove', (e) => {
+            if (e.target.closest('.chat-container')) return;
+            e.preventDefault();
+        }, { passive: false });
     </script>
 </body>
 </html>
