@@ -405,6 +405,19 @@ def chat():
         # Pop the user message if API call failed
         if session_id in conversations and len(conversations[session_id]) > 1:
             conversations[session_id].pop()
+        
+        # Fallback to demo mode if API is unavailable
+        if 'quota' in error_msg.lower() or 'rate' in str(e).lower() or '1113' in str(e):
+            hotel_info, recommendations = None, []
+            if hotel_id:
+                hotel_info, recommendations = get_hotel_context(hotel_id)
+            demo_response = generate_demo_response(user_message, hotel_info, recommendations)
+            return jsonify({
+                "response": demo_response,
+                "skill_used": "demo_mode",
+                "success": True
+            })
+        
         return jsonify({"error": error_msg, "success": False}), 500
 
 
@@ -528,10 +541,23 @@ def voice_chat():
             })
 
     except Exception as e:
-        return jsonify({"error": str(e), "success": False}), 500
-
-
-@app.route("/api/video-status/<task_id>", methods=["GET"])
+        error_msg = get_user_friendly_error(e)
+        print(f"Error in /api/voice-chat: {str(e)}")
+        traceback.print_exc()
+        
+        # Fallback to demo mode if API unavailable but we have transcription
+        if 'quota' in error_msg.lower() or 'rate' in str(e).lower() or '1113' in str(e):
+            # If we got a transcription before the error, use demo mode
+            if 'transcription' in dir() and transcription:
+                demo_response = generate_demo_response(transcription)
+                return jsonify({
+                    "transcription": transcription,
+                    "response": demo_response,
+                    "skill_used": "demo_mode",
+                    "success": True
+                })
+        
+        return jsonify({"error": error_msg, "success": False}), 500
 def video_status(task_id):
     """Check video generation status."""
     try:
@@ -768,6 +794,13 @@ def generate_video():
         print(f"Error in /api/generate-video: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": error_msg, "success": False}), 500
+
+
+# Serve static files (for local development; Vercel handles this via routes)
+@app.route("/<path:filename>")
+def serve_static(filename):
+    """Serve static files from public directory."""
+    return send_from_directory(PUBLIC_DIR, filename)
 
 
 # Export for Vercel
