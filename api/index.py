@@ -5,14 +5,41 @@ Integrates GLM models with intelligent skill routing.
 
 import os
 import sys
+import json
 import base64
+import sqlite3
+import logging
 import tempfile
 import asyncio
+import traceback
 from typing import Dict, Any, List
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
+from dotenv import load_dotenv
+import requests
+
+try:
+    from zhipuai import ZhipuAI
+except ImportError:
+    ZhipuAI = None
 
 # Load env vars
 load_dotenv()
+
+# Logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+# Paths
+DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'hotels.db')
+PUBLIC_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
+
+# Z.AI API config
+ZAI_BASE_URL = os.getenv('ZAI_BASE_URL', 'https://open.bigmodel.cn')
+ZAI_API_KEY = os.getenv('ZHIPUAI_API_KEY', '')
+ZAI_HEADERS = {
+    'Authorization': f'Bearer {ZAI_API_KEY}',
+    'Content-Type': 'application/json'
+}
 
 # Add src to path for skill imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -37,10 +64,13 @@ from src.skills.media import (
 app = Flask(__name__)
 
 # Initialize ZhipuAI client
+# Initialize ZhipuAI client (optional - app runs in demo mode without it)
 ZHIPU_API_KEY = os.getenv("ZHIPUAI_API_KEY")
-if not ZHIPU_API_KEY:
-    raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-client = ZhipuAI(api_key=ZHIPU_API_KEY)
+if ZHIPU_API_KEY and ZhipuAI:
+    client = ZhipuAI(api_key=ZHIPU_API_KEY)
+else:
+    client = None
+    logger.warning("ZhipuAI client not initialized - running in demo mode")
 
 # Initialize skills
 SKILLS = get_all_skills()

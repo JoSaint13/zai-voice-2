@@ -117,25 +117,6 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Chat Container */
-        .chat-container {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 15px;
-            padding: 15px;
-            margin-bottom: 20px;
-            min-height: 280px;
-            max-height: 350px;
-            overflow-y: auto;
-        }
-
-        .message {
-            margin-bottom: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            max-width: 85%;
-            animation: fadeIn 0.3s ease;
-        }
-
         .message.user {
             background: linear-gradient(135deg, var(--accent), var(--accent-dark));
             margin-left: auto;
@@ -459,32 +440,6 @@
                 <div class="label">NomadAI</div>
                 <div>Hello! I'm your hotel assistant. Hold the mic button to speak, or type below.</div>
             </div>
-
-            <div class="controls-row">
-                <button class="record-btn idle" id="recordBtn">
-                    <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/>
-                    </svg>
-                    <span id="recordText">Hold to Speak</span>
-                </button>
-            </div>
-
-            <div class="text-input-container">
-                <input type="text" class="text-input" id="textInput" placeholder="Or type a message..." onkeypress="handleKeyPress(event)">
-                <button class="btn" onclick="sendTextMessage()">Send</button>
-            </div>
-
-            <div class="toggle-row" style="margin-top: 15px;">
-                <span style="color: #888; font-size: 0.9rem;">Speak responses aloud</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="speakToggle" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-
-            <button class="btn btn-secondary" style="width: 100%; margin-top: 10px;" onclick="resetConversation()">Reset Conversation</button>
-
-            <div id="voiceStatus" class="status"></div>
         </div>
 
         <div class="controls-wrapper">
@@ -513,6 +468,9 @@
     </div>
 
     <script>
+        // API base URL - empty for same-origin (Vercel), or set for local dev
+        const API_BASE = '';
+
         // Elements
         const recordBtn = document.getElementById('recordBtn');
         const recordText = document.getElementById('recordText');
@@ -651,11 +609,11 @@
                         speakResponse(data.response);
                         vibrate(10);
                     } else {
-                        setStatus('voiceStatus', data.error || 'Error occurred', true);
+                        setStatus(data.error || 'Error occurred', true);
                     }
                 };
             } catch (err) {
-                setStatus('voiceStatus', 'Connection error', true);
+                setStatus('Connection error', true);
             }
         }
 
@@ -666,7 +624,7 @@
             textInput.value = '';
             textInput.blur();
             addMessage('user', message);
-            setStatus('voiceStatus', 'Thinking...');
+            setStatus('Thinking...');
 
             try {
                 const response = await fetch(`${API_BASE}/api/chat`, {
@@ -680,10 +638,10 @@
                     setStatus('Ready');
                     speakResponse(data.response);
                 } else {
-                    setStatus('voiceStatus', data.error || 'Error occurred', true);
+                    setStatus(data.error || 'Error occurred', true);
                 }
             } catch (err) {
-                setStatus('voiceStatus', 'Connection error', true);
+                setStatus('Connection error', true);
             }
         }
 
@@ -729,10 +687,9 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function setStatus(elementId, message, isError = false) {
-            const el = document.getElementById(elementId);
-            el.textContent = message;
-            el.className = isError ? 'status error' : (message ? 'status success' : 'status');
+        function setStatus(message, isError = false) {
+            status.textContent = message;
+            status.className = isError ? 'status error' : 'status';
         }
 
         function showResult(elementId, content) {

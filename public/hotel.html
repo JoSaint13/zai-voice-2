@@ -223,32 +223,6 @@
                 addMessage('assistant', "Connection error.");
             }
         }
-            ui.status.textContent = 'Concierge is typing...';
-
-            try {
-                const response = await fetch(`/api/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: text, 
-                        session_id: sessionId,
-                        hotel_id: HOTEL_ID 
-                    })
-                });
-                
-                const data = await response.json();
-                ui.status.textContent = '';
-                
-                if (data.success) {
-                    addMessage('assistant', data.response);
-                } else {
-                    addMessage('assistant', "I'm having trouble connecting right now.");
-                }
-            } catch (err) {
-                ui.status.textContent = '';
-                addMessage('assistant', "Connection error.");
-            }
-        }
 
         function addMessage(role, text) {
             const div = document.createElement('div');
