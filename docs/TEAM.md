@@ -2,6 +2,18 @@
 
 > Team structure, roles, and responsibilities
 
+**Version:** 0.1.0 | **Team Size:** 3 AI Agents | **Last Updated:** 2026-02-08
+
+---
+
+## Quick Reference
+
+| Agent | Model | Use For |
+|-------|-------|---------|
+| **Brain** | Opus 4.5 | Architecture, complex problems, strategy |
+| **Dev** | Sonnet 4.5 | Features, integrations, bug fixes |
+| **Runner** | Haiku 4.5 | Tests, validation, quick tasks |
+
 ---
 
 ## Team Overview

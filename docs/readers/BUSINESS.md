@@ -2,6 +2,18 @@
 
 > Executive summary for stakeholders, investors, and business teams
 
+**Version:** 0.1.0 | **Status:** MVP Complete | **Last Updated:** 2026-02-08
+
+---
+
+## Quick Links
+
+| Resource | Description |
+|----------|-------------|
+| [Live Demo](https://zai-voice-2.vercel.app) | Try the voice assistant |
+| [PRD](../PRD.md) | Full product requirements |
+| [Roadmap](../ROADMAP.md) | Implementation timeline |
+
 ---
 
 ## What is NomadAI?

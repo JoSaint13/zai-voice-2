@@ -2,6 +2,21 @@
 
 > **NomadAI** - Voice-first hotel smart assistant powered by Z.AI
 
+**Version:** 0.1.0 | **Status:** MVP Complete | **Last Updated:** 2026-02-08
+
+---
+
+## Start Here
+
+| New to NomadAI? | Document |
+|-----------------|----------|
+| **Using Claude Code?** | [CLAUDE.md](../CLAUDE.md) - AI assistant context |
+| **Business stakeholder?** | [BUSINESS.md](readers/BUSINESS.md) - Executive summary |
+| **Developer?** | [DEVELOPER.md](readers/DEVELOPER.md) - Technical guide |
+| **DevOps/SRE?** | [OPERATIONS.md](readers/OPERATIONS.md) - Deployment guide |
+
+---
+
 ## Quick Links
 
 | Document | Audience | Description |

@@ -2,6 +2,19 @@
 
 > Technical guide for engineers building and extending NomadAI
 
+**Version:** 0.1.0 | **Python:** 3.11+ | **Last Updated:** 2026-02-08
+
+---
+
+## Quick Links
+
+| Resource | Description |
+|----------|-------------|
+| [CLAUDE.md](../../CLAUDE.md) | AI assistant context file |
+| [Architecture](../ARCHITECTURE.md) | System design document |
+| [API Reference](#api-layer-apiindexpy) | Endpoint documentation |
+| [Skill Guide](#adding-new-skills) | How to add new skills |
+
 ---
 
 ## Quick Start

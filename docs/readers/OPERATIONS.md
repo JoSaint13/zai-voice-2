@@ -2,6 +2,28 @@
 
 > Deployment, monitoring, and maintenance for DevOps/SRE teams
 
+**Version:** 0.1.0 | **Platform:** Vercel | **Last Updated:** 2026-02-08
+
+---
+
+## Quick Links
+
+| Resource | Description |
+|----------|-------------|
+| [Vercel Dashboard](https://vercel.com) | Deployment management |
+| [Architecture](../ARCHITECTURE.md) | System design |
+| [Runbooks](#runbooks) | Incident response |
+
+---
+
+## Current Deployment
+
+| Component | Status | URL |
+|-----------|--------|-----|
+| Web App | ✅ Live | `zai-voice-2.vercel.app` |
+| API | ✅ Live | `/api/*` endpoints |
+| Region | Auto | Vercel Edge |
+
 ---
 
 ## Deployment Options
