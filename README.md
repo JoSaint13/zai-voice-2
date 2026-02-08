@@ -1,247 +1,154 @@
-# Z.AI Voice Assistant
+# NomadAI Voice Agent
 
-A full-stack voice assistant powered by Z.AI's GLM-ASR (speech recognition) and GLM-4.7 (language model). Features voice chat, translation, slide generation, and video effects - all in one unified interface.
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Status](https://img.shields.io/badge/status-MVP-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-![Z.AI](https://img.shields.io/badge/Powered%20by-Z.AI-blue)
-![Python](https://img.shields.io/badge/Python-3.9+-green)
-![Flask](https://img.shields.io/badge/Flask-3.0-lightgrey)
+> Voice-first hotel smart assistant powered by Z.AI
 
-## Features
+**[Documentation](docs/INDEX.md)** | **[Changelog](CHANGELOG.md)** | **[Roadmap](docs/ROADMAP.md)**
 
-| Feature | Description | Pricing |
-|---------|-------------|---------|
-| **Voice Chat** | Speech-to-text + AI chat + text-to-speech | Standard API rates |
-| **Translation** | 40+ languages, 6 translation strategies | $3 per 1M tokens |
-| **Slides** | AI-generated presentations | $0.7 per 1M tokens |
-| **Video Effects** | Transform photos into effect videos | $0.2 per video |
+---
 
-### Voice Assistant
-- **GLM-ASR-2512**: Accurate speech recognition
-- **GLM-4.7**: Intelligent conversational AI
-- **Browser TTS**: Voice responses read aloud
-- **Session Memory**: Maintains conversation context
+## What is NomadAI?
 
-### Translation Strategies
-| Strategy | Best For |
-|----------|----------|
-| General | Standard translations |
-| Paraphrased | Natural, fluent output |
-| Two-Step | Literal → refined expression |
-| Three-Stage | "Faithfulness, expressiveness, elegance" |
-| Reflective | Expert feedback optimization |
-| COT | Complex texts with reasoning |
+NomadAI is an AI-powered voice assistant for hotels that combines:
+- **Digital Concierge**: Room service, housekeeping, check-in/out
+- **Sightseeing Expert**: Local recommendations, itineraries, bookings
+- **Media Generation**: Destination previews with AI images/videos
 
-### Slide Generator
-- Professional presentations from any topic
-- 3-30 slides per generation
-- Styles: Professional, Creative, Minimal, Corporate
+## Tech Stack
 
-### Video Effects
-| Template | Description |
-|----------|-------------|
-| French Kiss | Two people gradually kiss (2-person photo) |
-| Body Shake | Rhythmic dance sequence |
-| Sexy Me | Clothing transformation effect |
+| Component | Model | Purpose |
+|-----------|-------|---------|
+| Speech Recognition | GLM-ASR-2512 | 20+ languages, dialect support |
+| Conversation | GLM-4.7 | Intelligent responses |
+| Image Generation | CogView-4 | Destination previews |
+| Video Generation | CogVideoX | Tour videos |
+
+---
 
 ## Quick Start
 
-### Prerequisites
-- Python 3.9+
-- Z.AI API Key ([Get one here](https://api.z.ai))
-
-### Installation
+### Web (Vercel)
 
 ```bash
-# Clone repository
-git clone <your-repo-url>
-cd zai-voice-2
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r api/requirements.txt
+# Deploy
+vercel --prod
 
 # Set API key
-export ZHIPUAI_API_KEY="your-api-key-here"
+vercel env add ZHIPUAI_API_KEY
+```
 
-# Start server
+### Local
+
+```bash
+# Install
+pip install -r requirements.txt
+
+# Configure
+export ZHIPUAI_API_KEY='your_key_here'
+
+# Run
 python api/index.py
+
+# Open http://localhost:3000
 ```
 
-### Access
+---
 
-Open http://localhost:8000 in your browser.
+## Features
 
-## Architecture
+### Voice Skills (18 total)
 
-```
-┌─────────────────────────────────────────────────────────┐
-│              Browser (http://localhost:8000)             │
-│  ┌─────────┐ ┌───────────┐ ┌────────┐ ┌───────────────┐ │
-│  │  Voice  │ │Translation│ │ Slides │ │ Video Effects │ │
-│  │  Chat   │ │           │ │        │ │               │ │
-│  └────┬────┘ └─────┬─────┘ └───┬────┘ └───────┬───────┘ │
-└───────┼────────────┼───────────┼──────────────┼─────────┘
-        │            │           │              │
-        └────────────┴─────┬─────┴──────────────┘
-                           │
-┌──────────────────────────┼──────────────────────────────┐
-│              Flask Server (api/index.py)                 │
-│                     Port 8000                            │
-├──────────────────────────┼──────────────────────────────┤
-│                     Z.AI API                             │
-│                 https://api.z.ai                         │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────┐ │
-│  │ GLM-ASR  │ │ GLM-4.7  │ │Translate │ │Slide/Video  │ │
-│  │ (Speech) │ │  (Chat)  │ │  Agent   │ │   Agents    │ │
-│  └──────────┘ └──────────┘ └──────────┘ └─────────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
+| Category | Skills |
+|----------|--------|
+| **Concierge** | Room service, housekeeping, amenities, WiFi, check-out, complaints, wake-up, billing |
+| **Sightseeing** | Recommendations, itinerary, directions, events, booking, translation |
+| **Media** | Image preview, video tour |
+| **System** | Language switch, human handoff, repeat, slow down, reset |
 
-## API Reference
-
-### Endpoints
+### API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Main application |
-| `/health` | GET | Health check |
-| `/api/chat` | POST | Text chat |
-| `/api/voice-chat` | POST | Voice → transcribe → chat |
-| `/api/transcribe` | POST | Audio transcription |
-| `/api/translate` | POST | Text translation |
-| `/api/generate-slides` | POST | Create presentation |
-| `/api/generate-video` | POST | Generate video effect |
+| `/api/transcribe` | POST | Audio → Text |
+| `/api/chat` | POST | Text → Response |
+| `/api/voice-chat` | POST | Audio → Response |
 | `/api/reset` | POST | Clear session |
 
-### Examples
-
-**Chat**
-```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello!", "session_id": "my-session"}'
-```
-
-**Translation**
-```bash
-curl -X POST http://localhost:8000/api/translate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Hello world",
-    "source_lang": "English",
-    "target_lang": "Chinese",
-    "strategy": "general"
-  }'
-```
-
-**Generate Slides**
-```bash
-curl -X POST http://localhost:8000/api/generate-slides \
-  -H "Content-Type: application/json" \
-  -d '{
-    "topic": "AI Market Analysis 2024",
-    "num_slides": 10,
-    "style": "professional"
-  }'
-```
+---
 
 ## Project Structure
 
 ```
 zai-voice-2/
-├── api/
-│   ├── index.py           # Flask server (API + static files)
-│   └── requirements.txt   # Server dependencies
-├── public/
-│   └── index.html         # Unified frontend (all features)
-├── clawdbot.py            # CLI version (local ASR model)
-├── requirements.txt       # CLI dependencies
-├── vercel.json            # Vercel deployment config
-├── test_api.py            # API tests
-└── test_voice_flow.py     # Voice flow tests
+├── api/index.py           # Flask API
+├── public/index.html      # Web UI
+├── src/skills/            # Skill implementations
+│   ├── base.py            # BaseSkill, Registry
+│   ├── concierge.py       # Hotel services
+│   ├── sightseeing.py     # Local exploration
+│   └── media.py           # Image/video generation
+├── tests/                 # Test suite
+├── scripts/demo.py        # Pipeline demo
+├── docs/                  # Documentation
+│   ├── PRD.md             # Product requirements
+│   ├── ARCHITECTURE.md    # System design
+│   ├── ROADMAP.md         # Implementation plan
+│   └── TEAM.md            # Team composition
+├── CHANGELOG.md           # Version history
+└── VERSION                # Current version
 ```
 
-## Deployment
+---
 
-### Vercel
+## Documentation
 
-1. **Install Vercel CLI**
-   ```bash
-   npm i -g vercel
-   ```
+| Document | Audience |
+|----------|----------|
+| [PRD](docs/PRD.md) | Product/Business |
+| [Architecture](docs/ARCHITECTURE.md) | Engineers |
+| [Developer Guide](docs/readers/DEVELOPER.md) | Developers |
+| [Operations Guide](docs/readers/OPERATIONS.md) | DevOps |
+| [Business Overview](docs/readers/BUSINESS.md) | Stakeholders |
 
-2. **Add environment variable**
-   ```bash
-   vercel env add ZHIPUAI_API_KEY
-   ```
+---
 
-3. **Deploy**
-   ```bash
-   vercel --prod
-   ```
+## Roadmap
 
-### Environment Variables
+| Phase | Status | Timeline |
+|-------|--------|----------|
+| Foundation | ✅ Done | Week 1-2 |
+| Skill Implementation | ⏳ In Progress | Week 3-4 |
+| PMS Integration | 📋 Planned | Month 2 |
+| Omnichannel | 📋 Planned | Month 3 |
+| Revenue Optimization | 📋 Planned | Month 4 |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ZHIPUAI_API_KEY` | Yes | Z.AI API key |
+See [ROADMAP.md](docs/ROADMAP.md) for details.
 
-## Development
+---
 
-### Running Tests
+## Team
 
-```bash
-python test_api.py
-python test_voice_flow.py
-```
+| Agent | Model | Role |
+|-------|-------|------|
+| Brain | Opus 4.5 | Architecture, strategy |
+| Dev | Sonnet 4.5 | Implementation |
+| Runner | Haiku 4.5 | Testing, validation |
 
-### CLI Version
+See [TEAM.md](docs/TEAM.md) for details.
 
-For local development with on-device ASR:
+---
 
-```bash
-pip install -r requirements.txt  # Includes PyTorch
-python clawdbot.py
-```
+## Version
 
-Note: Downloads GLM-ASR-Nano model (~1GB) on first run.
+**Current:** `0.1.0` (2026-02-08)
 
-## Troubleshooting
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
-| Error | Solution |
-|-------|----------|
-| `401 Unauthorized` | Check API key is set correctly |
-| `Connection refused` | Start server with `python api/index.py` |
-| `Port in use` | Kill existing process: `lsof -ti :8000 \| xargs kill` |
-| `Microphone denied` | Allow microphone access in browser |
-| `Timeout` | Check internet connection, try VPN |
-
-## Browser Support
-
-| Browser | Support |
-|---------|---------|
-| Chrome/Edge | Full |
-| Firefox | Full |
-| Safari | Partial (HTTPS required for mic) |
-
-## Tech Stack
-
-- **Backend**: Python, Flask, Flask-CORS
-- **Frontend**: HTML5, CSS3, Vanilla JS
-- **APIs**: Z.AI GLM-ASR-2512, GLM-4.7
-- **Deployment**: Vercel (serverless)
+---
 
 ## License
 
 MIT
-
-## Credits
-
-Powered by [Z.AI](https://z.ai)
-- GLM-4.7 language model
-- GLM-ASR-2512 speech recognition
-- Translation Agent
-- Slide/Video Agents

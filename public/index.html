@@ -2,92 +2,118 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Z.AI - Voice Assistant & More</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>NomadAI - Voice Assistant</title>
     <style>
+        :root {
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
+            --primary: #00d4ff;
+            --primary-dark: #0077b6;
+            --accent: #7b2cbf;
+            --accent-dark: #5a189a;
+            --danger: #ff4757;
+            --bg-dark: #1a1a2e;
+            --bg-darker: #16213e;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
             color: #fff;
+            display: flex;
+            flex-direction: column;
         }
 
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding-top: var(--safe-top);
+            padding-bottom: var(--safe-bottom);
+            padding-left: var(--safe-left);
+            padding-right: var(--safe-right);
         }
 
+        /* Header - Optimized for mobile */
         header {
             text-align: center;
-            padding: 25px 0;
+            padding: 16px 16px 12px;
+            flex-shrink: 0;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         h1 {
-            font-size: 2.5rem;
-            margin-bottom: 8px;
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
 
+        .version-badge {
+            font-size: 0.65rem;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 6px;
+            border-radius: 8px;
+            color: #888;
+        }
+
         .subtitle {
             color: #888;
-            font-size: 0.95rem;
+            font-size: 0.8rem;
+            margin-top: 4px;
         }
 
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            overflow-x: auto;
-            padding-bottom: 5px;
-        }
-
-        .tab {
-            padding: 12px 20px;
-            background: rgba(255, 255, 255, 0.05);
-            border: none;
-            border-radius: 10px;
-            color: #888;
-            cursor: pointer;
-            transition: all 0.3s;
-            white-space: nowrap;
-            font-size: 0.95rem;
-        }
-
-        .tab.active {
-            background: linear-gradient(135deg, #00d4ff, #0077b6);
-            color: white;
-        }
-
-        .tab:hover:not(.active) {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .tab-content {
-            display: none;
-            background: rgba(255, 255, 255, 0.05);
+        /* Chat Container - Flexible height */
+        .chat-container {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.03);
+            margin: 0 12px;
             border-radius: 20px;
-            padding: 25px;
-            min-height: 450px;
+            padding: 16px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
         }
 
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
+        .message {
+            margin-bottom: 12px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            max-width: 85%;
+            animation: fadeIn 0.25s ease;
+            font-size: 0.95rem;
+            line-height: 1.4;
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -111,13 +137,14 @@
         }
 
         .message.user {
-            background: linear-gradient(135deg, #7b2cbf, #5a189a);
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
             margin-left: auto;
-            text-align: right;
+            border-bottom-right-radius: 4px;
         }
 
         .message.assistant {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
+            border-bottom-left-radius: 4px;
         }
 
         .message.system {
@@ -128,44 +155,46 @@
 
         .message .label {
             font-size: 0.7rem;
-            color: #aaa;
+            color: rgba(255,255,255,0.5);
             margin-bottom: 4px;
+            font-weight: 500;
         }
 
-        .message.user .label {
-            color: #ddd;
+        /* Controls - Fixed at bottom, thumb-friendly */
+        .controls-wrapper {
+            flex-shrink: 0;
+            padding: 12px;
+            background: linear-gradient(to top, var(--bg-darker) 0%, transparent 100%);
         }
 
-        /* Controls */
-        .controls-row {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
+        /* Large Mic Button - Easy to tap */
         .record-btn {
-            flex: 1;
-            padding: 16px;
+            width: 100%;
+            min-height: 64px;
             font-size: 1rem;
+            font-weight: 600;
             border: none;
-            border-radius: 12px;
+            border-radius: 16px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 12px;
+            touch-action: manipulation;
         }
 
         .record-btn.idle {
-            background: linear-gradient(135deg, #00d4ff, #0077b6);
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
             color: white;
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
         }
 
         .record-btn.recording {
-            background: linear-gradient(135deg, #ff4757, #c0392b);
+            background: linear-gradient(135deg, var(--danger), #c0392b);
             color: white;
-            animation: pulse 1s infinite;
+            animation: pulse 0.8s infinite;
+            box-shadow: 0 4px 20px rgba(255, 71, 87, 0.4);
         }
 
         @keyframes pulse {
@@ -173,22 +202,29 @@
             50% { transform: scale(1.02); }
         }
 
-        .record-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0, 212, 255, 0.3);
+        .record-btn:active {
+            transform: scale(0.98);
         }
 
+        .mic-icon {
+            width: 28px;
+            height: 28px;
+        }
+
+        /* Text Input Row */
         .text-input-container {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            margin-top: 10px;
         }
 
         .text-input {
             flex: 1;
-            padding: 14px;
+            min-height: 48px;
+            padding: 0 16px;
             border: none;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.08);
             color: white;
             font-size: 1rem;
         }
@@ -197,38 +233,52 @@
             color: #666;
         }
 
-        /* Buttons */
-        .btn {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #7b2cbf, #5a189a);
+        .text-input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .send-btn {
+            min-width: 64px;
+            min-height: 48px;
+            padding: 0 20px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             color: white;
+            font-size: 0.95rem;
+            font-weight: 600;
             cursor: pointer;
-            font-size: 1rem;
-            transition: all 0.3s;
+            touch-action: manipulation;
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(123, 44, 191, 0.3);
+        .send-btn:active {
+            transform: scale(0.96);
         }
 
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        /* Reset & Status */
+        .footer-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+            gap: 12px;
         }
 
-        .btn-secondary {
+        .reset-btn {
+            min-height: 40px;
+            padding: 0 16px;
             background: transparent;
             border: 1px solid #444;
             color: #888;
+            font-size: 0.85rem;
+            cursor: pointer;
+            touch-action: manipulation;
         }
 
-        .btn-secondary:hover {
-            border-color: #00d4ff;
-            color: #00d4ff;
-            box-shadow: none;
+        .reset-btn:active {
+            border-color: var(--danger);
+            color: var(--danger);
         }
 
         /* Form Elements */
@@ -286,224 +336,128 @@
 
         /* Status */
         .status {
-            text-align: center;
-            padding: 10px;
-            color: #888;
-            font-size: 0.9rem;
-            min-height: 28px;
+            flex: 1;
+            text-align: right;
+            color: #666;
+            font-size: 0.8rem;
         }
 
         .status.error {
-            color: #ff4757;
-            background: rgba(255, 71, 87, 0.1);
-            border-radius: 8px;
-            padding: 12px;
+            color: var(--danger);
         }
 
-        .status.success {
-            color: #00d4ff;
-        }
-
-        /* File Upload */
-        .file-upload {
-            border: 2px dashed rgba(255, 255, 255, 0.3);
-            border-radius: 10px;
-            padding: 25px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .file-upload:hover {
-            border-color: #00d4ff;
-            background: rgba(0, 212, 255, 0.05);
-        }
-
-        .file-upload input[type="file"] {
+        /* Recording indicator */
+        .recording-indicator {
             display: none;
-        }
-
-        .preview-image {
-            max-width: 100%;
-            max-height: 200px;
-            border-radius: 10px;
-            margin-top: 15px;
-        }
-
-        /* Toggle Switch */
-        .toggle-row {
-            display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
+            gap: 8px;
             padding: 8px 0;
         }
 
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 44px;
-            height: 22px;
+        .recording-indicator.active {
+            display: flex;
         }
 
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #555;
-            border-radius: 22px;
-            transition: 0.3s;
-        }
-
-        .toggle-slider:before {
-            position: absolute;
-            content: '';
-            height: 16px;
-            width: 16px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
+        .recording-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--danger);
             border-radius: 50%;
-            transition: 0.3s;
+            animation: blink 0.8s infinite;
         }
 
-        .toggle-switch input:checked + .toggle-slider {
-            background: linear-gradient(135deg, #00d4ff, #0077b6);
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
 
-        .toggle-switch input:checked + .toggle-slider:before {
-            transform: translateX(22px);
+        .recording-text {
+            color: var(--danger);
+            font-size: 0.85rem;
+            font-weight: 500;
         }
 
-        .mic-icon {
-            width: 22px;
-            height: 22px;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container {
-                padding: 15px;
-            }
-
+        /* Landscape mode adjustments */
+        @media (orientation: landscape) and (max-height: 500px) {
             header {
-                padding: 20px 0;
+                padding: 8px 16px;
             }
-
             h1 {
-                font-size: 2rem;
+                font-size: 1.3rem;
             }
-
-            .grid {
-                grid-template-columns: 1fr;
+            .subtitle {
+                display: none;
             }
-
-            .tab {
-                padding: 10px 14px;
-                font-size: 0.85rem;
-            }
-
-            .tab-content {
-                padding: 18px;
-            }
-
             .chat-container {
-                min-height: 220px;
-                max-height: 300px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .container {
+                margin: 0 8px;
                 padding: 10px;
             }
-
-            header {
-                padding: 15px 0;
-            }
-
-            h1 {
-                font-size: 1.6rem;
-            }
-
-            .subtitle {
-                font-size: 0.85rem;
-            }
-
-            .tabs {
-                gap: 6px;
-            }
-
-            .tab {
-                padding: 8px 10px;
-                font-size: 0.8rem;
-            }
-
-            .tab-content {
-                padding: 15px;
-                min-height: 350px;
-                border-radius: 15px;
-            }
-
-            .chat-container {
-                min-height: 200px;
-                max-height: 250px;
-                padding: 12px;
-            }
-
             .message {
                 padding: 8px 12px;
-                max-width: 92%;
                 font-size: 0.9rem;
             }
-
-            .text-input-container {
-                flex-direction: column;
+            .controls-wrapper {
+                padding: 8px;
             }
-
-            .text-input, .btn {
-                width: 100%;
-            }
-
             .record-btn {
-                padding: 14px;
+                min-height: 50px;
             }
+        }
 
-            .controls-row {
-                flex-direction: column;
+        /* Galaxy S21 FE specific (1080x2340) */
+        @media (min-width: 360px) and (max-width: 420px) {
+            .chat-container {
+                margin: 0 10px;
+            }
+            .record-btn {
+                min-height: 68px;
+            }
+            .message {
+                max-width: 88%;
+            }
+        }
+
+        /* Larger phones */
+        @media (min-width: 420px) {
+            .app {
+                max-width: 480px;
+                margin: 0 auto;
+            }
+        }
+
+        /* Desktop */
+        @media (min-width: 768px) {
+            .app {
+                max-width: 600px;
+                padding: 20px;
+            }
+            header {
+                padding: 24px;
+            }
+            h1 {
+                font-size: 2.2rem;
+            }
+            .record-btn {
+                min-height: 72px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="app">
         <header>
-            <h1>Z.AI</h1>
-            <p class="subtitle">Voice Assistant | Translation | Slides | Video</p>
+            <div class="logo-container">
+                <h1>NomadAI</h1>
+                <span class="version-badge">v0.1.0</span>
+            </div>
+            <p class="subtitle">Voice-first hotel assistant</p>
         </header>
 
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('voice')">Voice Chat</button>
-            <button class="tab" onclick="switchTab('translate')">Translation</button>
-            <button class="tab" onclick="switchTab('slides')">Slides</button>
-            <button class="tab" onclick="switchTab('video')">Video</button>
-        </div>
-
-        <!-- Voice Chat Tab -->
-        <div id="voice-tab" class="tab-content active">
-            <div class="chat-container" id="chatContainer">
-                <div class="message assistant">
-                    <div class="label">Clawdbot</div>
-                    <div>Hello! I'm Clawdbot. Hold the mic to speak, or type a message below.</div>
-                </div>
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div class="label">NomadAI</div>
+                <div>Hello! I'm your hotel assistant. Hold the mic button to speak, or type below.</div>
             </div>
 
             <div class="controls-row">
@@ -533,153 +487,88 @@
             <div id="voiceStatus" class="status"></div>
         </div>
 
-        <!-- Translation Tab -->
-        <div id="translate-tab" class="tab-content">
-            <div class="grid">
-                <div class="input-group">
-                    <label>Source Language</label>
-                    <select id="sourceLang">
-                        <option value="auto">Auto-detect</option>
-                        <option value="English">English</option>
-                        <option value="Chinese">Chinese</option>
-                        <option value="Spanish">Spanish</option>
-                        <option value="French">French</option>
-                        <option value="German">German</option>
-                        <option value="Japanese">Japanese</option>
-                        <option value="Korean">Korean</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>Target Language</label>
-                    <select id="targetLang">
-                        <option value="English">English</option>
-                        <option value="Chinese">Chinese</option>
-                        <option value="Spanish">Spanish</option>
-                        <option value="French">French</option>
-                        <option value="German">German</option>
-                        <option value="Japanese">Japanese</option>
-                        <option value="Korean">Korean</option>
-                    </select>
-                </div>
+        <div class="controls-wrapper">
+            <div class="recording-indicator" id="recordingIndicator">
+                <span class="recording-dot"></span>
+                <span class="recording-text">Listening...</span>
             </div>
 
-            <div class="input-group">
-                <label>Strategy</label>
-                <select id="strategy">
-                    <option value="general">General</option>
-                    <option value="paraphrasing">Paraphrased</option>
-                    <option value="two_step">Two-Step</option>
-                    <option value="three_stage">Three-Stage</option>
-                    <option value="reflective">Reflective</option>
-                    <option value="cot">Chain of Thought</option>
-                </select>
+            <button class="record-btn idle" id="recordBtn">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/>
+                </svg>
+                <span id="recordText">Hold to Speak</span>
+            </button>
+
+            <div class="text-input-container">
+                <input type="text" class="text-input" id="textInput" placeholder="Type a message..." enterkeyhint="send">
+                <button class="send-btn" id="sendBtn">Send</button>
             </div>
 
-            <div class="input-group">
-                <label>Text to Translate</label>
-                <textarea id="translateText" placeholder="Enter text..."></textarea>
+            <div class="footer-row">
+                <button class="reset-btn" id="resetBtn">Reset</button>
+                <div class="status" id="status">Ready</div>
             </div>
-
-            <button class="btn" onclick="translateText()">Translate</button>
-
-            <div id="translateResults" class="result-box hidden"></div>
-            <div id="translateStatus" class="status"></div>
-        </div>
-
-        <!-- Slides Tab -->
-        <div id="slides-tab" class="tab-content">
-            <div class="input-group">
-                <label>Presentation Topic</label>
-                <input type="text" id="slideTopic" placeholder="e.g., AI Market Analysis, Product Launch...">
-            </div>
-
-            <div class="grid">
-                <div class="input-group">
-                    <label>Number of Slides</label>
-                    <input type="number" id="numSlides" value="10" min="3" max="30">
-                </div>
-                <div class="input-group">
-                    <label>Style</label>
-                    <select id="slideStyle">
-                        <option value="professional">Professional</option>
-                        <option value="creative">Creative</option>
-                        <option value="minimal">Minimal</option>
-                        <option value="corporate">Corporate</option>
-                    </select>
-                </div>
-            </div>
-
-            <button class="btn" onclick="generateSlides()">Generate Slides</button>
-
-            <div id="slidesResults" class="result-box hidden"></div>
-            <div id="slidesStatus" class="status"></div>
-        </div>
-
-        <!-- Video Tab -->
-        <div id="video-tab" class="tab-content">
-            <div class="input-group">
-                <label>Template</label>
-                <select id="videoTemplate">
-                    <option value="french_kiss">French Kiss (2 people)</option>
-                    <option value="bodyshake">Body Shake (dance)</option>
-                    <option value="sexy_me">Sexy Me (transformation)</option>
-                </select>
-            </div>
-
-            <div class="file-upload" onclick="document.getElementById('imageUpload').click()">
-                <input type="file" id="imageUpload" accept="image/*" onchange="previewImage(event)">
-                <div>Click to upload image</div>
-                <div style="color: #666; font-size: 0.8rem; margin-top: 8px;">PNG, JPG, JPEG</div>
-                <img id="imagePreview" class="preview-image" style="display: none;">
-            </div>
-
-            <button class="btn" style="margin-top: 20px; width: 100%;" onclick="generateVideo()">Generate Video</button>
-
-            <div id="videoResults" class="result-box hidden"></div>
-            <div id="videoStatus" class="status"></div>
         </div>
     </div>
 
     <script>
-        const API_BASE = '';
+        // Elements
+        const recordBtn = document.getElementById('recordBtn');
+        const recordText = document.getElementById('recordText');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const chatContainer = document.getElementById('chatContainer');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const status = document.getElementById('status');
+
+        // State
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
         let uploadedImage = null;
         const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
 
-        const recordBtn = document.getElementById('recordBtn');
-        const recordText = document.getElementById('recordText');
-        const chatContainer = document.getElementById('chatContainer');
-        const textInput = document.getElementById('textInput');
-
-        // Tab switching
-        function switchTab(tab) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById(`${tab}-tab`).classList.add('active');
+        // Haptic feedback
+        function vibrate(pattern = 10) {
+            if (navigator.vibrate) {
+                navigator.vibrate(pattern);
+            }
         }
 
         // Initialize media recorder
         async function initMediaRecorder() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : 'audio/webm';
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType });
 
                 mediaRecorder.ondataavailable = (event) => {
-                    audioChunks.push(event.data);
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
                 };
 
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioBlob = new Blob(audioChunks, { type: mimeType });
                     audioChunks = [];
                     await sendAudioToAPI(audioBlob);
                 };
 
-                setStatus('voiceStatus', 'Ready');
+                setStatus('Ready');
             } catch (err) {
-                setStatus('voiceStatus', 'Microphone access denied', true);
+                setStatus('Mic access denied', true);
                 recordBtn.disabled = true;
             }
         }
@@ -689,27 +578,60 @@
             audioChunks = [];
             mediaRecorder.start();
             isRecording = true;
+            vibrate(15);
+
             recordBtn.className = 'record-btn recording';
             recordText.textContent = 'Release to Send';
-            setStatus('voiceStatus', 'Recording...');
+            recordingIndicator.classList.add('active');
+            setStatus('Listening...');
         }
 
         function stopRecording() {
             if (!isRecording) return;
             mediaRecorder.stop();
             isRecording = false;
+            vibrate([10, 50, 10]);
+
             recordBtn.className = 'record-btn idle';
             recordText.textContent = 'Hold to Speak';
-            setStatus('voiceStatus', 'Processing...');
+            recordingIndicator.classList.remove('active');
+            setStatus('Processing...');
         }
 
-        // Mouse/touch events
-        recordBtn.addEventListener('mousedown', startRecording);
-        recordBtn.addEventListener('mouseup', stopRecording);
-        recordBtn.addEventListener('mouseleave', () => isRecording && stopRecording());
-        recordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
-        recordBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
+        // Touch events for hold-to-record
+        recordBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!mediaRecorder) {
+                initMediaRecorder().then(() => startRecording());
+            } else {
+                startRecording();
+            }
+        }, { passive: false });
 
+        recordBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopRecording();
+        }, { passive: false });
+
+        recordBtn.addEventListener('touchcancel', (e) => {
+            stopRecording();
+        });
+
+        // Mouse events for desktop
+        recordBtn.addEventListener('mousedown', () => {
+            if (!mediaRecorder) {
+                initMediaRecorder().then(() => startRecording());
+            } else {
+                startRecording();
+            }
+        });
+
+        recordBtn.addEventListener('mouseup', stopRecording);
+        recordBtn.addEventListener('mouseleave', () => {
+            if (isRecording) stopRecording();
+        });
+
+        // Send audio to API
         async function sendAudioToAPI(audioBlob) {
             try {
                 const reader = new FileReader();
@@ -725,8 +647,9 @@
                     if (data.success) {
                         addMessage('user', data.transcription);
                         addMessage('assistant', data.response);
-                        setStatus('voiceStatus', '');
+                        setStatus('Ready');
                         speakResponse(data.response);
+                        vibrate(10);
                     } else {
                         setStatus('voiceStatus', data.error || 'Error occurred', true);
                     }
@@ -736,10 +659,12 @@
             }
         }
 
+        // Send text message
         async function sendTextMessage() {
             const message = textInput.value.trim();
             if (!message) return;
             textInput.value = '';
+            textInput.blur();
             addMessage('user', message);
             setStatus('voiceStatus', 'Thinking...');
 
@@ -752,7 +677,7 @@
                 const data = await response.json();
                 if (data.success) {
                     addMessage('assistant', data.response);
-                    setStatus('voiceStatus', '');
+                    setStatus('Ready');
                     speakResponse(data.response);
                 } else {
                     setStatus('voiceStatus', data.error || 'Error occurred', true);
@@ -762,15 +687,45 @@
             }
         }
 
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') sendTextMessage();
-        }
+        // Event listeners
+        sendBtn.addEventListener('click', sendTextMessage);
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendTextMessage();
+            }
+        });
 
+        resetBtn.addEventListener('click', async () => {
+            vibrate(10);
+            try {
+                await fetch('/api/reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+
+                chatContainer.innerHTML = `
+                    <div class="message assistant">
+                        <div class="label">NomadAI</div>
+                        <div>Conversation reset. How can I help you?</div>
+                    </div>
+                `;
+                setStatus('Ready');
+            } catch (err) {
+                setStatus('Error resetting', true);
+            }
+        });
+
+        // UI helpers
         function addMessage(role, text) {
-            const div = document.createElement('div');
-            div.className = `message ${role}`;
-            div.innerHTML = `<div class="label">${role === 'user' ? 'You' : 'Clawdbot'}</div><div>${text}</div>`;
-            chatContainer.appendChild(div);
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.innerHTML = `
+                <div class="label">${role === 'user' ? 'You' : 'NomadAI'}</div>
+                <div>${text}</div>
+            `;
+            chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
@@ -787,123 +742,22 @@
         }
 
         function speakResponse(text) {
-            if (!document.getElementById('speakToggle').checked) return;
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
+                speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = 0.95;
                 speechSynthesis.speak(utterance);
             }
         }
 
-        async function resetConversation() {
-            try {
-                await fetch(`${API_BASE}/api/reset`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-                chatContainer.innerHTML = `<div class="message assistant"><div class="label">Clawdbot</div><div>Conversation reset. How can I help?</div></div>`;
-                setStatus('voiceStatus', 'Reset');
-            } catch (err) {
-                setStatus('voiceStatus', 'Error resetting', true);
-            }
-        }
-
-        // Translation
-        async function translateText() {
-            const text = document.getElementById('translateText').value.trim();
-            if (!text) { setStatus('translateStatus', 'Enter text to translate', true); return; }
-            setStatus('translateStatus', 'Translating...');
-            try {
-                const response = await fetch(`${API_BASE}/api/translate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        text: text,
-                        source_lang: document.getElementById('sourceLang').value,
-                        target_lang: document.getElementById('targetLang').value,
-                        strategy: document.getElementById('strategy').value
-                    })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showResult('translateResults', `Original:\n${text}\n\n---\n\nTranslation:\n${data.translation}`);
-                    setStatus('translateStatus', 'Done!');
-                } else {
-                    setStatus('translateStatus', data.error || 'Failed', true);
-                }
-            } catch (err) {
-                setStatus('translateStatus', 'Connection error', true);
-            }
-        }
-
-        // Slides
-        async function generateSlides() {
-            const topic = document.getElementById('slideTopic').value.trim();
-            if (!topic) { setStatus('slidesStatus', 'Enter a topic', true); return; }
-            setStatus('slidesStatus', 'Generating...');
-            try {
-                const response = await fetch(`${API_BASE}/api/generate-slides`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        topic: topic,
-                        num_slides: parseInt(document.getElementById('numSlides').value),
-                        style: document.getElementById('slideStyle').value
-                    })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showResult('slidesResults', data.slides);
-                    setStatus('slidesStatus', 'Done!');
-                } else {
-                    setStatus('slidesStatus', data.error || 'Failed', true);
-                }
-            } catch (err) {
-                setStatus('slidesStatus', 'Connection error', true);
-            }
-        }
-
-        // Video
-        function previewImage(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                document.getElementById('imagePreview').src = e.target.result;
-                document.getElementById('imagePreview').style.display = 'block';
-                uploadedImage = e.target.result.split(',')[1];
-            };
-            reader.readAsDataURL(file);
-        }
-
-        async function generateVideo() {
-            if (!uploadedImage) { setStatus('videoStatus', 'Upload an image first', true); return; }
-            setStatus('videoStatus', 'Generating...');
-            try {
-                const response = await fetch(`${API_BASE}/api/generate-video`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image_base64: uploadedImage,
-                        template: document.getElementById('videoTemplate').value
-                    })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showResult('videoResults', `Video generation initiated!\n\nTemplate: ${data.template}`);
-                    setStatus('videoStatus', 'Done!');
-                } else {
-                    setStatus('videoStatus', data.error || 'Failed', true);
-                }
-            } catch (err) {
-                setStatus('videoStatus', 'Connection error', true);
-            }
-        }
-
-        // Init
+        // Initialize
         initMediaRecorder();
+
+        // Prevent pull-to-refresh on mobile
+        document.body.addEventListener('touchmove', (e) => {
+            if (e.target.closest('.chat-container')) return;
+            e.preventDefault();
+        }, { passive: false });
     </script>
 </body>
 </html>

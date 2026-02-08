@@ -1,66 +1,49 @@
 """
-Clawdbot API - Flask backend for Vercel
-Uses Z.AI API directly (https://api.z.ai)
+NomadAI Voice Agent API - Flask backend for Vercel
+Integrates GLM models with intelligent skill routing.
 """
 
 import os
+import sys
 import base64
 import tempfile
-import traceback
-import sqlite3
-import json
-import requests
-import logging
-import uuid
-from logging.handlers import RotatingFileHandler
-from dotenv import load_dotenv
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
+import asyncio
+from typing import Dict, Any, List
+from flask import Flask, request, jsonify
 
 # Load env vars
 load_dotenv()
 
-# Get the project root directory (parent of api/)
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PUBLIC_DIR = os.path.join(PROJECT_ROOT, 'public')
-DB_PATH = os.path.join(PROJECT_ROOT, 'hotel_assistant.db')
-LOG_FILE = os.path.join(PROJECT_ROOT, 'server.log')
+# Add src to path for skill imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Setup Logging
-logger = logging.getLogger("HotelAssistant")
-logger.setLevel(logging.INFO)
+from src.skills import get_all_skills
+from src.skills.concierge import (
+    RoomServiceSkill,
+    HousekeepingSkill,
+    AmenitiesSkill,
+    WifiSkill,
+)
+from src.skills.sightseeing import (
+    RecommendationSkill,
+    ItinerarySkill,
+    DirectionsSkill,
+)
+from src.skills.media import (
+    ImagePreviewSkill,
+    VideoTourSkill,
+)
 
-# File Handler (Rotates after 10MB)
-file_handler = RotatingFileHandler(LOG_FILE, maxBytes=10000000, backupCount=5)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s'))
-logger.addHandler(file_handler)
+app = Flask(__name__)
 
-# Console Handler
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s'))
-logger.addHandler(console_handler)
-
-app = Flask(__name__, static_folder=PUBLIC_DIR, static_url_path='')
-CORS(app)  # Enable CORS for all routes
-app.config['PROPAGATE_EXCEPTIONS'] = True  # Show full error traces
-
-# Z.AI API Configuration
-ZAI_API_KEY = os.getenv("ZHIPUAI_API_KEY")  # Keeping var name for compatibility
-if not ZAI_API_KEY:
+# Initialize ZhipuAI client
+ZHIPU_API_KEY = os.getenv("ZHIPUAI_API_KEY")
+if not ZHIPU_API_KEY:
     raise ValueError("ZHIPUAI_API_KEY environment variable is required")
+client = ZhipuAI(api_key=ZHIPU_API_KEY)
 
-ZAI_BASE_URL = "https://api.z.ai/api"
-ZAI_HEADERS = {
-    "Authorization": f"Bearer {ZAI_API_KEY}",
-    "Content-Type": "application/json",
-    "Accept-Language": "en-US,en"
-}
-
-# Model Configuration - can be overridden via env var
-ZAI_CHAT_MODEL = os.getenv("ZAI_CHAT_MODEL", "glm-4.7")  # Default: glm-4.7
-
-# Demo/Mock mode for when API balance is low
-DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+# Initialize skills
+SKILLS = get_all_skills()
 
 # Conversation history (in production, use Redis/database)
 conversations = {}
@@ -187,66 +170,71 @@ def client_logs():
         return jsonify({"error": "Logging failed"}), 500
 
 
+def route_intent(transcription: str) -> Dict[str, Any]:
+    """
+    Route user utterance to the appropriate skill using GLM-4.7.
+
+    Args:
+        transcription: The user's transcribed speech
+
+    Returns:
+        Dict with matched skill name and confidence
+    """
+    # Build skill descriptions for intent classification
+    skills_description = "\n".join([
+        f"- {skill.name}: {skill.description}\n  Examples: {', '.join(skill.example_utterances[:3])}"
+        for skill in SKILLS
+    ])
+
+    messages = [
+        {
+            "role": "system",
+            "content": f"""You are an intent classification system.
+            Given a user utterance, determine which skill should handle it.
+
+            Available Skills:
+            {skills_description}
+
+            Respond with ONLY the skill name (e.g., "room_service", "wifi_help", "local_recommendations").
+            If no skill matches, respond with "general_chat"."""
+        },
+        {
+            "role": "user",
+            "content": transcription
+        }
+    ]
+
+    response = client.chat.completions.create(
+        model="glm-4.7",
+        messages=messages,
+        temperature=0.1  # Low temperature for consistent classification
+    )
+
+    skill_name = response.choices[0].message.content.strip().lower()
+
+    # Find matching skill
+    for skill in SKILLS:
+        if skill.name == skill_name:
+            return {
+                "skill": skill,
+                "skill_name": skill_name,
+                "matched": True
+            }
+
+    return {
+        "skill": None,
+        "skill_name": "general_chat",
+        "matched": False
+    }
+
+
 @app.route("/", methods=["GET"])
 def home():
-    """Serve the main frontend page."""
-    return send_from_directory(PUBLIC_DIR, 'index.html')
-
-
-@app.route("/features", methods=["GET"])
-def features():
-    """Redirect to main page (features are now merged)."""
-    return send_from_directory(PUBLIC_DIR, 'index.html')
-
-
-@app.route("/<path:filename>", methods=["GET"])
-def serve_static(filename):
-    """Serve static files from public directory."""
-    if os.path.exists(os.path.join(PUBLIC_DIR, filename)):
-        return send_from_directory(PUBLIC_DIR, filename)
-    return jsonify({"error": "Not found"}), 404
-
-
-@app.route("/health", methods=["GET"])
-@app.route("/api/health", methods=["GET"])
-def health():
-    """Health check endpoint to verify API connectivity."""
-    try:
-        # Quick test with Z.AI API
-        response = requests.get(
-            f"{ZAI_BASE_URL}/paas/v4/models",
-            headers=ZAI_HEADERS,
-            timeout=5.0
-        )
-        return jsonify({
-            "status": "healthy" if response.status_code == 200 else "degraded",
-            "api_configured": True,
-            "api_version": "Z.AI v4"
-        })
-    except Exception as e:
-        return jsonify({
-            "status": "degraded",
-            "api_configured": bool(ZAI_API_KEY),
-            "error": str(e)
-        }), 503
-
-
-@app.route("/api/hotel/<hotel_id>", methods=["GET"])
-def get_hotel_config(hotel_id):
-    """Get public hotel configuration for the frontend widget."""
-    try:
-        hotel_info, _ = get_hotel_context(hotel_id)
-        if not hotel_info:
-            return jsonify({"error": "Hotel not found"}), 404
-            
-        return jsonify({
-            "name": hotel_info['name'],
-            "description": hotel_info.get('description', 'AI Concierge Service'),
-            # In a real app, these would come from a 'branding' JSON column
-            "theme_color": "#2c3e50" 
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "status": "ok",
+        "message": "NomadAI Voice Agent API is running",
+        "skills": [skill.name for skill in SKILLS]
+    })
 
 
 @app.route("/api/transcribe", methods=["POST"])
@@ -303,7 +291,7 @@ def transcribe():
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    """Chat with GLM-4.7 via Z.AI API - Hotel Assistant Mode."""
+    """Text-based chat with skill routing (for testing without audio)."""
     try:
         data = request.get_json()
 
@@ -314,160 +302,60 @@ def chat():
         hotel_id = data.get("hotel_id")
         user_message = data["message"]
 
-        # Get hotel context if available
-        hotel_info = None
-        recommendations = []
-        if hotel_id:
-            hotel_info, recommendations = get_hotel_context(hotel_id)
+        # Route to appropriate skill
+        intent_result = route_intent(user_message)
 
-        # Build System Prompt
-        system_prompt = "You are a helpful and professional Hotel Concierge AI."
-        if hotel_info:
-            system_prompt += f"\nYou work at {hotel_info['name']}."
-            if hotel_info['knowledge_base']:
-                system_prompt += f"\n\nHOTEL KNOWLEDGE BASE:\n{hotel_info['knowledge_base']}"
-            
-            if recommendations:
-                rec_text = "\n".join([f"- {r['name']} ({r['category']}): {r['description']}" for r in recommendations])
-                system_prompt += f"\n\nLOCAL RECOMMENDATIONS:\n{rec_text}"
-                
-            system_prompt += "\n\nINSTRUCTIONS:\n"
-            system_prompt += "- Answer questions based ONLY on the provided Knowledge Base and Recommendations.\n"
-            system_prompt += "- If you don't know the answer, politely say you will check with the front desk.\n"
-            system_prompt += "- Be polite, warm, and brief."
-        else:
-            system_prompt += " You are currently in demo mode with no specific hotel data."
+        # Execute skill or fallback to general chat
+        if intent_result["matched"] and intent_result["skill"]:
+            skill = intent_result["skill"]
 
-        # Get or create conversation history
-        if session_id not in conversations:
-            conversations[session_id] = [{
-                "role": "system",
-                "content": system_prompt
-            }]
-        else:
-            # Update system prompt if it's the first message (in case hotel changed context)
-            if conversations[session_id][0]['role'] == 'system':
-                conversations[session_id][0]['content'] = system_prompt
-
-        # Add user message
-        conversations[session_id].append({
-            "role": "user",
-            "content": user_message
-        })
-
-        # Tools definition
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "request_late_checkout",
-                    "description": "Request a late checkout for the guest.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "time": {"type": "string", "description": "Requested time (e.g. 2:00 PM)"},
-                            "reason": {"type": "string", "description": "Reason (optional)"}
-                        },
-                        "required": ["time"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "contact_front_desk",
-                    "description": "Escalate complex issues or requests to human staff.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "issue": {"type": "string", "description": "Description of the issue or request"}
-                        },
-                        "required": ["issue"]
-                    }
-                }
+            context = {
+                "transcription": user_message,
+                "session_id": session_id,
+                "location": "Tokyo",
+                "hotel_location": "Shibuya Grand Hotel",
             }
-        ]
 
-        # Call GLM-4.7 via Z.AI API
-        print(f"Calling GLM-4.7 API for session {session_id}...")
-        
-        payload = {
-            "model": "glm-4.7",
-            "messages": conversations[session_id],
-            "temperature": 0.7, 
-            "top_p": 0.7,
-            "max_tokens": 500,
-            "stream": False,
-            "tools": tools
-        }
-        
-        response = requests.post(
-            f"{ZAI_BASE_URL}/paas/v4/chat/completions",
-            headers=ZAI_HEADERS,
-            json=payload,
-            timeout=30.0
-        )
-        
-        print(f"API response status: {response.status_code}")
+            # Run async skill execution
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            skill_result = loop.run_until_complete(skill.execute(context))
+            loop.close()
 
-        if response.status_code == 200:
-            result = response.json()
-            message = result["choices"][0]["message"]
-            
-            # Handle Tool Calls
-            tool_calls = message.get("tool_calls")
-            if tool_calls:
-                # Append assistant message with tool calls to history
-                conversations[session_id].append(message)
-                
-                for tool_call in tool_calls:
-                    function_name = tool_call['function']['name']
-                    args = json.loads(tool_call['function']['arguments'])
-                    print(f"Tool Executed: {function_name} with {args}")
-                    
-                    # Mock execution result
-                    tool_result = f"Request received for {function_name}. Staff notified."
-                    if function_name == "request_late_checkout":
-                         # In a real app, you'd insert into DB here
-                        tool_result = f"Late checkout request for {args.get('time')} confirmed. Cost is €50. Added to bill."
-                    
-                    conversations[session_id].append({
-                        "role": "tool",
-                        "tool_call_id": tool_call['id'],
-                        "content": tool_result
-                    })
-                
-                # Follow-up call to get final answer
-                payload["messages"] = conversations[session_id]
-                del payload["tools"] # Don't loop infinitely
-                
-                follow_up = requests.post(
-                    f"{ZAI_BASE_URL}/paas/v4/chat/completions",
-                    headers=ZAI_HEADERS, json=payload, timeout=30.0
-                )
-                
-                if follow_up.status_code == 200:
-                    message = follow_up.json()["choices"][0]["message"]
-                    # fall through to normal processing
+            assistant_message = skill_result["response"]
 
-            # GLM-4.7 logic for content vs reasoning
-            reasoning = message.get("reasoning_content", "")
-            content = message.get("content", "")
-            
-            if not content and reasoning:
-                import re
-                quotes = re.findall(r'"([^"]+)"', reasoning)
-                if quotes:
-                    assistant_message = quotes[-1]
-                else:
-                    lines = [l.strip() for l in reasoning.split('\n') if l.strip()]
-                    assistant_message = lines[-1] if lines else reasoning[:200]
-            else:
-                assistant_message = content or reasoning
-            
-            print(f"Assistant message: {assistant_message}")
+            return jsonify({
+                "response": assistant_message,
+                "skill_used": intent_result["skill_name"],
+                "action": skill_result.get("action"),
+                "metadata": skill_result.get("metadata", {}),
+                "image_url": skill_result.get("image_url"),
+                "video_task_id": skill_result.get("task_id"),
+                "success": True
+            })
 
-            # Save to history
+        else:
+            # Fallback to general chat
+            if session_id not in conversations:
+                conversations[session_id] = [{
+                    "role": "system",
+                    "content": """You are NomadAI, a helpful hotel voice assistant.
+                    Keep responses concise (2-3 sentences) since they will be spoken aloud.
+                    Be friendly, helpful, and conversational."""
+                }]
+
+            conversations[session_id].append({
+                "role": "user",
+                "content": user_message
+            })
+
+            response = client.chat.completions.create(
+                model="glm-4.7",
+                messages=conversations[session_id]
+            )
+
+            assistant_message = response.choices[0].message.content
+
             conversations[session_id].append({
                 "role": "assistant",
                 "content": assistant_message
@@ -475,30 +363,9 @@ def chat():
 
             return jsonify({
                 "response": assistant_message,
+                "skill_used": "general_chat",
                 "success": True
             })
-        else:
-            error_detail = response.text
-            print(f"API Error: {error_detail}")
-            
-            # Check for balance/quota errors - use demo mode as fallback
-            if response.status_code in [429, 402] or '1113' in error_detail or 'Insufficient balance' in error_detail:
-                print("API balance insufficient - falling back to demo mode")
-                demo_response = generate_demo_response(user_message, hotel_info, recommendations)
-                conversations[session_id].append({
-                    "role": "assistant",
-                    "content": demo_response
-                })
-                return jsonify({
-                    "response": demo_response,
-                    "success": True,
-                    "demo_mode": True
-                })
-            
-            return jsonify({
-                "error": f"API error: {response.status_code}",
-                "success": False
-            }), response.status_code
 
     except Exception as e:
         error_msg = get_user_friendly_error(e)
@@ -513,7 +380,7 @@ def chat():
 
 @app.route("/api/voice-chat", methods=["POST"])
 def voice_chat():
-    """Complete voice chat: transcribe + respond using Z.AI API."""
+    """Complete voice chat: transcribe + route + respond with skills."""
     try:
         data = request.get_json()
 
@@ -522,7 +389,7 @@ def voice_chat():
 
         session_id = data.get("session_id", "default")
 
-        # Step 1: Transcribe with Z.AI API
+        # Step 1: Transcribe with GLM-ASR-2512
         audio_bytes = base64.b64decode(data["audio_base64"])
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -548,48 +415,106 @@ def voice_chat():
             
         transcription = asr_response.json().get("text", "")
 
-        # Step 2: Chat with GLM-4.7 via Z.AI API
-        if session_id not in conversations:
-            conversations[session_id] = [{
-                "role": "system",
-                "content": """You are Clawdbot, a helpful voice assistant.
-                Keep responses concise (2-3 sentences) since they will be spoken aloud.
-                Be friendly, helpful, and conversational."""
-            }]
+        # Step 2: Route to appropriate skill
+        intent_result = route_intent(transcription)
 
-        conversations[session_id].append({
-            "role": "user",
-            "content": transcription
-        })
+        # Step 3: Execute skill or fallback to general chat
+        if intent_result["matched"] and intent_result["skill"]:
+            # Execute the matched skill
+            skill = intent_result["skill"]
 
-        payload = {
-            "model": "glm-4.7",
-            "messages": conversations[session_id],
-            "temperature": 0.95,
-            "stream": False
-        }
-        
-        chat_response = requests.post(
-            f"{ZAI_BASE_URL}/paas/v4/chat/completions",
-            headers=ZAI_HEADERS,
-            json=payload,
-            timeout=30.0
-        )
-        
-        if chat_response.status_code != 200:
-            return jsonify({"error": "Chat failed", "success": False}), 500
+            # Build context for skill execution
+            context = {
+                "transcription": transcription,
+                "session_id": session_id,
+                "location": "Tokyo",  # In production, get from user profile
+                "hotel_location": "Shibuya Grand Hotel",
+            }
 
-        assistant_message = chat_response.json()["choices"][0]["message"]["content"]
+            # Run async skill execution in sync context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            skill_result = loop.run_until_complete(skill.execute(context))
+            loop.close()
 
-        conversations[session_id].append({
-            "role": "assistant",
-            "content": assistant_message
-        })
+            assistant_message = skill_result["response"]
+
+            # Save to conversation history
+            if session_id not in conversations:
+                conversations[session_id] = []
+
+            conversations[session_id].append({
+                "role": "user",
+                "content": transcription
+            })
+            conversations[session_id].append({
+                "role": "assistant",
+                "content": assistant_message
+            })
+
+            return jsonify({
+                "transcription": transcription,
+                "response": assistant_message,
+                "skill_used": intent_result["skill_name"],
+                "action": skill_result.get("action"),
+                "metadata": skill_result.get("metadata", {}),
+                "image_url": skill_result.get("image_url"),
+                "video_task_id": skill_result.get("task_id"),
+                "success": True
+            })
+
+        else:
+            # Fallback to general chat
+            if session_id not in conversations:
+                conversations[session_id] = [{
+                    "role": "system",
+                    "content": """You are NomadAI, a helpful hotel voice assistant.
+                    Keep responses concise (2-3 sentences) since they will be spoken aloud.
+                    Be friendly, helpful, and conversational."""
+                }]
+
+            conversations[session_id].append({
+                "role": "user",
+                "content": transcription
+            })
+
+            chat_response = client.chat.completions.create(
+                model="glm-4.7",
+                messages=conversations[session_id]
+            )
+
+            assistant_message = chat_response.choices[0].message.content
+
+            conversations[session_id].append({
+                "role": "assistant",
+                "content": assistant_message
+            })
+
+            return jsonify({
+                "transcription": transcription,
+                "response": assistant_message,
+                "skill_used": "general_chat",
+                "success": True
+            })
+
+    except Exception as e:
+        return jsonify({"error": str(e), "success": False}), 500
+
+
+@app.route("/api/video-status/<task_id>", methods=["GET"])
+def video_status(task_id):
+    """Check video generation status."""
+    try:
+        from src.skills.media import check_video_status
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(check_video_status(task_id))
+        loop.close()
 
         return jsonify({
-            "transcription": transcription,
-            "response": assistant_message,
-            "success": True
+            "success": True,
+            **result
         })
 
     except Exception as e:
