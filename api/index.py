@@ -267,6 +267,120 @@ def home():
     })
 
 
+@app.route("/api/ping", methods=["GET"])
+def ping():
+    """Test API connectivity to ZhipuAI via raw HTTP (no SDK retries)."""
+    import time
+    import jwt
+
+    results = {"api_key": "configured" if ZHIPU_API_KEY else "missing", "tests": []}
+
+    if not ZAI_API_KEY:
+        results["tests"].append({"model": "all", "status": "skip", "detail": "No API key configured"})
+        return jsonify(results)
+
+    # Generate JWT token (same way ZhipuAI SDK does it)
+    def make_token(api_key):
+        parts = api_key.split(".")
+        if len(parts) != 2:
+            return api_key  # fallback to raw key
+        kid, secret = parts
+        payload = {
+            "api_key": kid,
+            "exp": int(time.time()) + 300,
+            "timestamp": int(time.time() * 1000),
+        }
+        return jwt.encode(payload, secret, algorithm="HS256", headers={"alg": "HS256", "sign_type": "SIGN"})
+
+    try:
+        token = make_token(ZAI_API_KEY)
+    except Exception as e:
+        results["tests"].append({"model": "auth", "status": "error", "detail": f"JWT generation failed: {e}"})
+        return jsonify(results)
+
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    # Quick connectivity check first
+    t0 = time.time()
+    try:
+        r = requests.get(f"{ZAI_BASE_URL}", timeout=(3, 5))
+        ms = int((time.time() - t0) * 1000)
+        results["network"] = {"status": "ok", "latency_ms": ms, "base_url": ZAI_BASE_URL}
+    except requests.Timeout:
+        ms = int((time.time() - t0) * 1000)
+        results["network"] = {"status": "timeout", "latency_ms": ms, "base_url": ZAI_BASE_URL,
+                              "detail": "Cannot reach API server. If outside China, this API may be geo-blocked."}
+        return jsonify(results)
+    except Exception as e:
+        ms = int((time.time() - t0) * 1000)
+        results["network"] = {"status": "error", "latency_ms": ms, "detail": str(e)[:200]}
+        return jsonify(results)
+
+    # Test chat models via raw HTTP (NO sdk retries)
+    models = ["glm-4-plus", "glm-4.7", "glm-4-flash"]
+    for model in models:
+        t0 = time.time()
+        try:
+            r = requests.post(
+                f"{ZAI_BASE_URL}/api/paas/v4/chat/completions",
+                headers=headers,
+                json={"model": model, "messages": [{"role": "user", "content": "Reply: pong"}], "max_tokens": 5},
+                timeout=(3, 8),
+            )
+            ms = int((time.time() - t0) * 1000)
+            if r.status_code == 200:
+                data = r.json()
+                results["tests"].append({
+                    "model": model, "status": "ok",
+                    "reply": data["choices"][0]["message"]["content"],
+                    "tokens": data.get("usage", {}).get("total_tokens"),
+                    "latency_ms": ms,
+                })
+            else:
+                try:
+                    body = r.json()
+                    code = body.get("error", {}).get("code", "")
+                    msg = body.get("error", {}).get("message", "")
+                except Exception:
+                    code = str(r.status_code)
+                    msg = r.text[:150]
+                results["tests"].append({
+                    "model": model, "status": "error",
+                    "code": code, "detail": msg,
+                    "http": r.status_code, "latency_ms": ms,
+                })
+        except requests.Timeout:
+            ms = int((time.time() - t0) * 1000)
+            results["tests"].append({"model": model, "status": "error", "detail": "Timeout (>10s)", "latency_ms": ms})
+        except Exception as e:
+            ms = int((time.time() - t0) * 1000)
+            results["tests"].append({"model": model, "status": "error", "detail": str(e)[:200], "latency_ms": ms})
+
+    # Test ASR endpoint
+    t0 = time.time()
+    try:
+        r = requests.post(
+            f"{ZAI_BASE_URL}/api/paas/v4/audio/transcriptions",
+            headers={"Authorization": f"Bearer {token}"},
+            data={"model": "glm-asr-2512", "stream": "false"},
+            files={"file": ("test.wav", b"\x00" * 100, "audio/wav")},
+            timeout=(3, 8),
+        )
+        ms = int((time.time() - t0) * 1000)
+        results["tests"].append({
+            "model": "glm-asr-2512",
+            "status": "ok" if r.status_code in (200, 400) else "error",
+            "http": r.status_code,
+            "detail": "reachable" if r.status_code in (200, 400) else r.text[:150],
+            "latency_ms": ms,
+        })
+    except Exception as e:
+        ms = int((time.time() - t0) * 1000)
+        results["tests"].append({"model": "glm-asr-2512", "status": "error", "detail": str(e)[:200], "latency_ms": ms})
+
+    return jsonify(results)
+
+
 @app.route("/api/transcribe", methods=["POST"])
 def transcribe():
     """Transcribe audio using GLM-ASR-2512 via Z.AI API."""

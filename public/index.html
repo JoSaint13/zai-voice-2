@@ -462,7 +462,19 @@
 
             <div class="footer-row">
                 <button class="reset-btn" id="resetBtn">Reset</button>
+                <button class="reset-btn" id="pingBtn" style="border-color:#00d4ff;color:#00d4ff;">API Test</button>
                 <div class="status" id="status">Ready</div>
+            </div>
+
+            <!-- API Test Results Modal -->
+            <div id="pingModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;padding:20px;overflow-y:auto;">
+                <div style="max-width:500px;margin:40px auto;background:#1e1e2e;border-radius:16px;padding:20px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                        <h2 style="font-size:1.1rem;color:#00d4ff;">Z.AI API Diagnostics</h2>
+                        <button onclick="document.getElementById('pingModal').style.display='none'" style="background:none;border:none;color:#888;font-size:1.5rem;cursor:pointer;">&times;</button>
+                    </div>
+                    <div id="pingResults" style="font-family:monospace;font-size:0.85rem;line-height:1.6;color:#ccc;">Running tests...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -479,7 +491,52 @@
         const textInput = document.getElementById('textInput');
         const sendBtn = document.getElementById('sendBtn');
         const resetBtn = document.getElementById('resetBtn');
+        const pingBtn = document.getElementById('pingBtn');
+        const pingModal = document.getElementById('pingModal');
+        const pingResults = document.getElementById('pingResults');
         const status = document.getElementById('status');
+
+        // API Test / Ping
+        pingBtn.addEventListener('click', async () => {
+            pingModal.style.display = 'block';
+            pingResults.innerHTML = '<span style="color:#00d4ff;">Running API tests... (may take 10-20s)</span>';
+            try {
+                const r = await fetch(`${API_BASE}/api/ping`);
+                const data = await r.json();
+                let html = `<div style="margin-bottom:12px;">API Key: <span style="color:${data.api_key === 'configured' ? '#4caf50' : '#ff4757'}">${data.api_key}</span></div>`;
+                
+                // Network status
+                if (data.network) {
+                    const n = data.network;
+                    const nColor = n.status === 'ok' ? '#4caf50' : '#ff4757';
+                    html += `<div style="margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;">
+                        Network: <span style="color:${nColor}">${n.status}</span> (${n.latency_ms}ms) — ${n.base_url || ''}
+                        ${n.detail ? `<div style="color:#ff9800;font-size:0.8rem;margin-top:4px;">${n.detail}</div>` : ''}
+                    </div>`;
+                }
+                
+                if (data.tests && data.tests.length > 0) {
+                if (data.tests && data.tests.length > 0) {
+                html += '<table style="width:100%;border-collapse:collapse;">';
+                html += '<tr style="color:#888;text-align:left;"><th style="padding:6px;">Model</th><th>Status</th><th>Detail</th><th>Ms</th></tr>';
+                for (const t of data.tests) {
+                    const color = t.status === 'ok' ? '#4caf50' : t.status === 'skip' ? '#888' : '#ff4757';
+                    const icon = t.status === 'ok' ? '\u2705' : t.status === 'skip' ? '\u23ed' : '\u274c';
+                    const detail = t.reply || t.code || t.detail || '';
+                    html += `<tr style="border-top:1px solid #333;">
+                        <td style="padding:8px 6px;color:#ddd;">${t.model}</td>
+                        <td style="color:${color};">${icon} ${t.status}</td>
+                        <td style="color:#aaa;font-size:0.78rem;max-width:200px;word-break:break-all;">${detail.substring(0, 120)}</td>
+                        <td style="color:#888;">${t.latency_ms || '-'}</td>
+                    </tr>`;
+                }
+                html += '</table>';
+                }
+                pingResults.innerHTML = html;
+            } catch (err) {
+                pingResults.innerHTML = `<span style="color:#ff4757;">\u274c Failed to reach API: ${err.message}</span>`;
+            }
+        });
 
         // State
         let mediaRecorder;
