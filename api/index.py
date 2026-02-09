@@ -176,6 +176,44 @@ def generate_demo_response(user_message, hotel_info=None, recommendations=None):
     return f"Thank you for your question. In demo mode, I can help with common queries about breakfast times, WiFi, checkout, and local recommendations. [Demo Mode]"
 
 
+# Default hotel config (used when no DB is available)
+DEFAULT_HOTELS = {
+    "2ada3c2b-b208-4599-9c46-f32dc16ff950": {
+        "id": "2ada3c2b-b208-4599-9c46-f32dc16ff950",
+        "name": "NomadAI Hotel",
+        "description": "Your AI-powered hotel concierge",
+        "theme_color": "#1a1a2e",
+    }
+}
+
+
+@app.route("/api/hotel/<hotel_id>", methods=["GET"])
+def get_hotel(hotel_id):
+    """Get hotel configuration by ID."""
+    # Try database first
+    hotel_info, recommendations = get_hotel_context(hotel_id)
+    if hotel_info:
+        return jsonify({
+            "id": hotel_id,
+            "name": hotel_info.get("name", "Hotel"),
+            "description": "AI Concierge",
+            "theme_color": hotel_info.get("theme_color", "#1a1a2e"),
+            "recommendations": recommendations,
+        })
+
+    # Fallback to defaults
+    if hotel_id in DEFAULT_HOTELS:
+        return jsonify(DEFAULT_HOTELS[hotel_id])
+
+    # Unknown hotel — return a generic config so the page still works
+    return jsonify({
+        "id": hotel_id,
+        "name": "Hotel Concierge",
+        "description": "AI-powered assistant",
+        "theme_color": "#333333",
+    })
+
+
 @app.route("/api/logs", methods=["POST"])
 def client_logs():
     """Receive logs from the frontend."""

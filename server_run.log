@@ -1,8 +1,15 @@
-📁 Serving static files from: /Users/andreyzherditskiy/work/zai-voice-2/public
+📁 Serving static files from: /Users/andreyzherditskiy/work/zai-voice-2/api/../public
 🌐 Frontend: http://localhost:8000
 🌐 Features: http://localhost:8000/features
 📡 API Docs: http://localhost:8000/api/health
+🔧 Debug mode: OFF
  * Serving Flask app 'index'
- * Debug mode: on
-Address already in use
-Port 8000 is in use by another program. Either identify and stop that program, or start the server with a different port.
+ * Debug mode: off
+INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://192.168.250.143:8000
+INFO:werkzeug:[33mPress CTRL+C to quit[0m
+INFO:werkzeug:127.0.0.1 - - [09/Feb/2026 13:40:49] "[33mGET /api/health HTTP/1.1[0m" 404 -
+INFO:werkzeug:127.0.0.1 - - [09/Feb/2026 13:40:53] "GET /api/hotel/2ada3c2b-b208-4599-9c46-f32dc16ff950 HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [09/Feb/2026 13:40:58] "GET /hotel.html HTTP/1.1" 200 -

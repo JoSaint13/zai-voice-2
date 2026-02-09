@@ -1,11 +1,12 @@
-.PHONY: help server web install clean
+.PHONY: help server server-bg server-stop web install clean
 
 # Default target: display help
 help:
 	@echo "Usage: make [command]"
 	@echo ""
 	@echo "Commands:"
-	@echo "  server   Start the Backend API server (Flask)"
+	@echo "  server      Start the Backend API server (Flask)"
+	@echo "  server-stop Stop the running server"
 	@echo "  web      Open the Hotel Assistant web widget in your browser"
 	@echo "  logs     Watch server logs in real-time"
 	@echo "  install  Install Python dependencies"
@@ -22,6 +23,16 @@ server-bg:
 	@FLASK_DEBUG=0 /Users/andreyzherditskiy/work/zai-voice-2/.venv/bin/python api/index.py > server_run.log 2>&1 &
 	@sleep 2
 	@curl -s http://127.0.0.1:8000/api/health > /dev/null && echo "✓ Server running on http://localhost:8000" || echo "✗ Server failed to start"
+
+# Stop the running server
+server-stop:
+	@echo "Stopping server on port 8000..."
+	@PID=$$(lsof -ti:8000); \
+	if [ -n "$$PID" ]; then \
+		kill $$PID 2>/dev/null && echo "✓ Server stopped (PID $$PID)"; \
+	else \
+		echo "No server running on port 8000"; \
+	fi
 
 # Open the web widget in the default browser
 web:
