@@ -266,6 +266,139 @@ def sanitize_input(text: str) -> str:
     
     return text
 
+
+# ──────────────────────────────────────────────────────────────
+# FAQ Response Cache
+# ──────────────────────────────────────────────────────────────
+
+import re
+import hashlib
+from collections import OrderedDict
+from threading import Lock
+
+# FAQ cache configuration
+FAQ_CACHE_TTL = 3600  # 1 hour
+FAQ_CACHE_MAX_SIZE = 500  # max entries
+FAQ_CACHE_ENABLED = os.getenv("FAQ_CACHE_ENABLED", "true").lower() == "true"
+
+# FAQ patterns - common hotel questions
+FAQ_PATTERNS = [
+    r"\bwifi\b",
+    r"\bpassword\b",
+    r"\bbreakfast\b",
+    r"\bcheck.?out\b",
+    r"\bpool\b",
+    r"\bgym\b",
+    r"\bparking\b",
+    r"\brestaurant\b",
+    r"\broom\s+service\b",
+    r"\bhousekeeping\b",
+    r"\bamenities\b",
+    r"\bhours\b",
+    r"\bopen\b",
+    r"\bclose\b",
+    r"\btime\b",
+]
+
+class FAQCache:
+    """
+    Thread-safe LRU cache with TTL for FAQ responses.
+    """
+    def __init__(self, max_size: int = 500, ttl: int = 3600):
+        self.max_size = max_size
+        self.ttl = ttl
+        self._cache = OrderedDict()  # key: (response, timestamp)
+        self._lock = Lock()
+        self.stats = {"hits": 0, "misses": 0, "evictions": 0}
+    
+    def _make_key(self, hotel_id: str, question: str) -> str:
+        """Create cache key from hotel_id and normalized question."""
+        normalized = question.lower().strip()
+        question_hash = hashlib.md5(normalized.encode()).hexdigest()[:16]
+        return f"{hotel_id}:{question_hash}"
+    
+    def _is_expired(self, timestamp: float) -> bool:
+        """Check if cache entry has expired."""
+        return time.time() - timestamp > self.ttl
+    
+    def _evict_oldest(self):
+        """Remove oldest entry to make room."""
+        if self._cache:
+            self._cache.popitem(last=False)
+            self.stats["evictions"] += 1
+    
+    def get(self, hotel_id: str, question: str) -> str | None:
+        """Get cached response if available and not expired."""
+        if not FAQ_CACHE_ENABLED:
+            return None
+        
+        key = self._make_key(hotel_id, question)
+        with self._lock:
+            if key in self._cache:
+                response, timestamp = self._cache[key]
+                if not self._is_expired(timestamp):
+                    # Move to end (LRU)
+                    self._cache.move_to_end(key)
+                    self.stats["hits"] += 1
+                    logger.info(f"[cache] HIT hotel={hotel_id} key={key[:20]}...")
+                    return response
+                else:
+                    # Expired, remove
+                    del self._cache[key]
+                    logger.info(f"[cache] EXPIRED hotel={hotel_id} key={key[:20]}...")
+            
+            self.stats["misses"] += 1
+            return None
+    
+    def set(self, hotel_id: str, question: str, response: str):
+        """Cache a response."""
+        if not FAQ_CACHE_ENABLED:
+            return
+        
+        key = self._make_key(hotel_id, question)
+        with self._lock:
+            # Evict if at capacity
+            if len(self._cache) >= self.max_size:
+                self._evict_oldest()
+            
+            self._cache[key] = (response, time.time())
+            logger.info(f"[cache] SET hotel={hotel_id} key={key[:20]}... size={len(self._cache)}")
+    
+    def clear(self):
+        """Clear all cache entries."""
+        with self._lock:
+            self._cache.clear()
+            logger.info(f"[cache] CLEARED all entries")
+    
+    def get_stats(self) -> dict:
+        """Get cache statistics."""
+        with self._lock:
+            total = self.stats["hits"] + self.stats["misses"]
+            hit_rate = self.stats["hits"] / total if total > 0 else 0.0
+            return {
+                "enabled": FAQ_CACHE_ENABLED,
+                "size": len(self._cache),
+                "max_size": self.max_size,
+                "ttl_seconds": self.ttl,
+                "hits": self.stats["hits"],
+                "misses": self.stats["misses"],
+                "evictions": self.stats["evictions"],
+                "hit_rate": round(hit_rate, 3),
+            }
+
+# Global FAQ cache instance
+faq_cache = FAQCache(max_size=FAQ_CACHE_MAX_SIZE, ttl=FAQ_CACHE_TTL)
+
+
+def is_faq_question(text: str) -> bool:
+    """Check if question matches FAQ patterns."""
+    text_lower = text.lower()
+    for pattern in FAQ_PATTERNS:
+        if re.search(pattern, text_lower):
+            return True
+    return False
+
+
 # Initialize skills
 SKILLS = get_all_skills()
 
@@ -668,7 +801,7 @@ def list_providers():
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    """Simple health check."""
+    """Simple health check with cache stats."""
     return jsonify({
         "status": "ok",
         "version": APP_VERSION,
@@ -680,6 +813,19 @@ def health():
         "tts_model": CHUTES_TTS_MODEL,
         "stt_endpoint": VOICE_LISTEN_LLM,
         "tts_endpoint": SPEECH_LLM,
+        "cache": faq_cache.get_stats(),
+    })
+
+
+@app.route("/api/cache/clear", methods=["POST"])
+def clear_cache():
+    """Clear FAQ cache."""
+    stats_before = faq_cache.get_stats()
+    faq_cache.clear()
+    return jsonify({
+        "success": True,
+        "cleared": stats_before["size"],
+        "message": f"Cleared {stats_before['size']} cache entries"
     })
 
 
@@ -1353,15 +1499,30 @@ def chat():
             hotel_info, _ = get_hotel_context(hotel_id)
             if not hotel_info:
                 hotel_info = DEFAULT_HOTELS.get(hotel_id)
-
-        # Run agentic loop
-        assistant_message = agent_loop(user_message, session_id, hotel_info=hotel_info)
+        
+        # Check FAQ cache first
+        cache_hit = False
+        if hotel_id and is_faq_question(user_message):
+            cached_response = faq_cache.get(hotel_id, user_message)
+            if cached_response:
+                cache_hit = True
+                assistant_message = cached_response
+                logger.info(f"[chat] Cache HIT for FAQ question")
+        
+        # Run agentic loop if no cache hit
+        if not cache_hit:
+            assistant_message = agent_loop(user_message, session_id, hotel_info=hotel_info)
+            
+            # Cache FAQ responses
+            if hotel_id and is_faq_question(user_message):
+                faq_cache.set(hotel_id, user_message, assistant_message)
 
         return jsonify({
             "response": assistant_message,
             "brain_llm": BRAIN_LLM_MODEL,
-            "success": True
-        })
+            "success": True,
+            "cached": cache_hit
+        }), 200, {"X-Cache": "HIT" if cache_hit else "MISS"}
 
     except Exception as e:
         error_msg = get_user_friendly_error(e)
