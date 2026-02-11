@@ -841,6 +841,10 @@ function startRec() {
         setStatus(voiceStatus, 'Voice disabled (ASR not configured)', true);
         return;
     }
+    
+    // Stop any playing audio when user wants to speak
+    stopAllAudio();
+    
     if (!micStream) { initMic().then(startRec); return; }
     if (!mediaRecorder || mediaRecorder.state !== 'inactive') return;
     audioChunks = [];
@@ -868,6 +872,7 @@ function stopRec() {
 // Audio queue for streaming TTS playback
 let audioQueue = [];
 let isPlayingQueue = false;
+let currentAudio = null; // Track currently playing audio
 
 async function playAudioQueue() {
     if (isPlayingQueue) return;
@@ -875,12 +880,25 @@ async function playAudioQueue() {
     while (audioQueue.length > 0) {
         const b64 = audioQueue.shift();
         await new Promise(resolve => {
-            const audio = new Audio('data:audio/wav;base64,' + b64);
-            audio.onended = resolve;
-            audio.onerror = resolve;
-            audio.play().catch(resolve);
+            currentAudio = new Audio('data:audio/wav;base64,' + b64);
+            currentAudio.onended = () => { currentAudio = null; resolve(); };
+            currentAudio.onerror = () => { currentAudio = null; resolve(); };
+            currentAudio.play().catch(() => { currentAudio = null; resolve(); });
         });
     }
+    isPlayingQueue = false;
+    currentAudio = null;
+}
+
+function stopAllAudio() {
+    // Stop currently playing audio
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+    }
+    // Clear audio queue
+    audioQueue = [];
     isPlayingQueue = false;
 }
 
