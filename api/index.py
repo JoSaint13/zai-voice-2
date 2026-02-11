@@ -52,12 +52,12 @@ VOICE_LISTEN_LLM = CHUTES_STT_ENDPOINT or f"{CHUTES_BASE}/v1/audio/transcription
 SPEECH_LLM = CHUTES_TTS_ENDPOINT
 
 
-class ChutesHTTPError(Exception):
-    """HTTP error wrapper for Chutes API."""
-    def __init__(self, status_code: int, message: str):
-        super().__init__(message)
-        self.status_code = status_code
-        self.message = message
+# ChutesHTTPError: use a factory to avoid module-level class (Vercel runtime compat)
+def _chutes_http_error(status_code, message):
+    e = RuntimeError(f"[Chutes HTTP {status_code}] {message}")
+    e.status_code = status_code
+    e.message = message
+    return e
 
 # ── Provider Registry ──
 PROVIDERS = {
@@ -187,7 +187,7 @@ def chutes_post_json(path: str, payload: dict, stream: bool = False):
             msg = body.get("error", body.get("detail", r.text))
         except Exception:
             msg = r.text
-        raise ChutesHTTPError(r.status_code, str(msg)[:400])
+        raise _chutes_http_error(r.status_code, str(msg)[:400])
     return r
 
 
@@ -212,7 +212,7 @@ def call_chutes_stt(audio_base64: str, language: str | None = None) -> str:
                 msg = r.json()
             except Exception:
                 msg = r.text
-            raise ChutesHTTPError(r.status_code, f"Direct STT endpoint error: {msg}")
+            raise _chutes_http_error(r.status_code, f"Direct STT endpoint error: {msg}")
         data = r.json()
         if isinstance(data, list):
             data = data[0] if data else {}
@@ -262,7 +262,7 @@ def call_chutes_tts(text: str, voice: str | None = None) -> str:
                 msg = r.json()
             except Exception:
                 msg = r.text[:200]
-            raise ChutesHTTPError(r.status_code, f"Direct TTS endpoint error: {msg}")
+            raise _chutes_http_error(r.status_code, f"Direct TTS endpoint error: {msg}")
 
         # Kokoro returns raw audio bytes (WAV) or JSON with base64
         content_type = r.headers.get("Content-Type", "")
@@ -996,9 +996,11 @@ def transcribe():
             return jsonify({"error": "audio_base64 required"}), 400
         text = call_chutes_stt(audio_b64, language=language)
         return jsonify({"success": True, "text": text, "language": language or "auto"})
-    except ChutesHTTPError as e:
-        logger.error(f"STT error {e.status_code}: {e.message}")
-        return jsonify({"error": e.message, "success": False, "reason": f"stt_{e.status_code}"}), 502
+    except RuntimeError as e:
+        sc = getattr(e, 'status_code', 500)
+        msg = getattr(e, 'message', str(e))
+        logger.error(f"STT error {sc}: {msg}")
+        return jsonify({"error": msg, "success": False, "reason": f"stt_{sc}"}), 502
     except Exception as e:
         error_msg = get_user_friendly_error(e)
         logger.error(f"STT error: {e}")
@@ -1180,19 +1182,20 @@ def voice_chat():
             "session_id": session_id
         })
 
-    except ChutesHTTPError as e:
-        # Specific handling for missing STT chute
-        logger.error(f"Chutes error {e.status_code}: {e.message}")
+    except RuntimeError as e:
+        sc = getattr(e, 'status_code', 500)
+        msg = getattr(e, 'message', str(e))
+        logger.error(f"Chutes error {sc}: {msg}")
         reason = "voice_chat_failed"
         status = 502
-        if e.status_code == 404:
+        if sc == 404:
             reason = "stt_not_available"
             return jsonify({
                 "success": False,
-                "error": "Speech-to-text model not available on this Chutes account. Set CHUTES_STT_MODEL to a chute you own or create a transcription chute.",
+                "error": "Speech-to-text model not available on this Chutes account.",
                 "reason": reason
             }), status
-        return jsonify({"success": False, "error": e.message, "reason": reason}), status
+        return jsonify({"success": False, "error": msg, "reason": reason}), status
     except Exception as e:
         error_msg = get_user_friendly_error(e)
         logger.error(f"Error in /api/voice-chat: {e}")
@@ -1310,9 +1313,11 @@ def tts():
             return jsonify({"error": "text required"}), 400
         audio_b64 = call_chutes_tts(text, voice=voice)
         return jsonify({"success": True, "audio_base64": audio_b64, "voice": voice or CHUTES_TTS_MODEL, "format": "wav"})
-    except ChutesHTTPError as e:
-        logger.error(f"TTS error {e.status_code}: {e.message}")
-        return jsonify({"error": e.message, "success": False, "reason": f"tts_{e.status_code}"}), 502
+    except RuntimeError as e:
+        sc = getattr(e, 'status_code', 500)
+        msg = getattr(e, 'message', str(e))
+        logger.error(f"TTS error {sc}: {msg}")
+        return jsonify({"error": msg, "success": False, "reason": f"tts_{sc}"}), 502
     except Exception as e:
         error_msg = get_user_friendly_error(e)
         logger.error(f"TTS error: {e}")
