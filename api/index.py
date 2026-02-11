@@ -817,7 +817,8 @@ def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iteratio
 You have tools to help guests with hotel services, local recommendations, and making phone calls.
 Use tools when appropriate. Keep spoken responses concise (2-3 sentences).
 If the guest asks you to call a place, use the voice_call tool to initiate and conduct the call, then report back.
-For general conversation, just respond directly without tools."""
+For general conversation, just respond directly without tools.
+IMPORTANT: Always respond in the same language the guest uses. If they speak Russian, reply in Russian. If English, reply in English. Match the guest's language."""
 
     # Init or continue conversation
     if session_id not in conversations:

@@ -273,12 +273,28 @@
                 </div>
             </div>
             <div class="chat-controls">
-                <div class="field" style="margin-bottom:10px;">
-                    <label style="color:#aaa;font-size:.85rem;">Voice</label>
-                    <select id="voiceSelect">
-                        <option value="kokoro">Kokoro (быстрее)</option>
-                        <option value="csm-1b">CSM-1B (натуральнее)</option>
-                    </select>
+                <div class="grid2" style="margin-bottom:10px;">
+                    <div class="field">
+                        <label style="color:#aaa;font-size:.85rem;">Language</label>
+                        <select id="voiceLangSelect">
+                            <option value="en">English</option>
+                            <option value="ru">Русский</option>
+                            <option value="zh">中文</option>
+                            <option value="ja">日本語</option>
+                            <option value="ko">한국어</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                            <option value="ar">العربية</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label style="color:#aaa;font-size:.85rem;">Voice</label>
+                        <select id="voiceSelect">
+                            <option value="kokoro">Kokoro (быстрее)</option>
+                            <option value="csm-1b">CSM-1B (натуральнее)</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="voice-bar">
                     <button class="btn-mic idle" id="micBtn">
@@ -443,6 +459,7 @@ const HOTEL_ID = new URLSearchParams(location.search).get('id') || DEFAULT_HOTEL
 const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
 let voiceEnabled = false; // runtime flag from /api/health
 let ttsVoice = 'kokoro';   // runtime default from /api/health
+let voiceLang = 'en';      // STT language
 
 // ── Provider state ──
 let currentProvider = 'chutes';
@@ -464,6 +481,7 @@ const micText         = $('#micText');
 const voiceResetBtn   = $('#voiceResetBtn');
 const voiceStatus     = $('#voiceStatus');
 const voiceSelect     = $('#voiceSelect');
+const voiceLangSelect = $('#voiceLangSelect');
 const trBtn           = $('#trBtn');
 const trResult        = $('#trResult');
 const slidesBtn       = $('#slidesBtn');
@@ -809,7 +827,7 @@ async function sendVoice(blob) {
                 const r = await fetch(`${API}/api/voice-chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice, stream_tts: true })
+                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice, language: voiceLang, stream_tts: true })
                 });
 
                 const eventReader = r.body.getReader();
@@ -847,7 +865,7 @@ async function sendVoice(blob) {
                 const r = await fetch(`${API}/api/voice-chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice })
+                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice, language: voiceLang })
                 });
                 const data = await r.json();
                 if (data.success) {
@@ -883,6 +901,9 @@ voiceResetBtn.addEventListener('click', async () => {
 
 voiceSelect.addEventListener('change', () => {
     ttsVoice = voiceSelect.value;
+});
+voiceLangSelect.addEventListener('change', () => {
+    voiceLang = voiceLangSelect.value;
 });
 
 const vadThresholdInput = $('#vadThreshold');
