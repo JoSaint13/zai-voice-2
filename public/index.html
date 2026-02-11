@@ -208,7 +208,7 @@
     <header>
         <div class="logo-row">
             <h1>NomadAI</h1>
-            <span class="badge">v0.2.0</span>
+            <span class="badge" id="versionBadge">v...</span>
         </div>
         <p class="tagline">AI Hotel Concierge — Powered by Chutes.ai</p>
         <p class="hotel-name" id="hotelName">Loading...</p>
@@ -563,6 +563,7 @@ $$('.tab').forEach(tab => {
         if (voiceEnabled) enableVoiceUi(); else disableVoiceUi();
         ttsVoice = h.tts_model || 'kokoro';
         if (voiceSelect) voiceSelect.value = ttsVoice;
+        if (h.version) $('#versionBadge').textContent = 'v' + h.version;
     } catch (e) {
         console.warn('Health init:', e);
         disableVoiceUi();

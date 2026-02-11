@@ -18,6 +18,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2026-02-11
+
+### Added
+- **Agentic Architecture**: OpenClaw-inspired tool-calling agent loop (brain_llm = MiMo-V2-Flash)
+- **Named LLM Roles**: brain_llm (reasoning), voice_listen_llm (STT/Whisper), speech_llm (TTS/Kokoro)
+- **Voice Call Skill**: Mock telephony with simulated restaurant conversations
+- **Wake Word Detection**: Browser-based trigger word detection ("hey nomad", "привет номад")
+- **TTS Streaming**: SSE-based sentence-by-sentence audio streaming
+- **Language Selector**: Voice tab language picker (EN/RU/ZH/JA/KO/ES/FR/DE/AR)
+- **Dynamic Version**: Version read from VERSION file, displayed in UI via /api/health
+
+### Fixed
+- STT list response parsing (Whisper returns array, not dict)
+- TTS direct Kokoro endpoint integration (binary WAV, not JSON)
+- TTS voice parameter mapping (kokoro → af_heart)
+- Vercel deployment crash (removed `handler = app` triggering vc_init issubclass bug)
+- LLM responds in guest's language (explicit lang instruction in system prompt)
+
+---
+
 ## [0.1.0] - 2026-02-08
 
 ### Added

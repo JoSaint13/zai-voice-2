@@ -25,6 +25,14 @@ logging.basicConfig(level=logging.INFO)
 # Paths
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'hotels.db')
 PUBLIC_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
+VERSION_FILE = os.path.join(os.path.dirname(__file__), '..', 'VERSION')
+
+# Read version from file
+try:
+    with open(VERSION_FILE) as _vf:
+        APP_VERSION = _vf.read().strip()
+except Exception:
+    APP_VERSION = "0.0.0"
 
 # Chutes.ai API config (sole provider)
 CHUTES_API_KEY = os.getenv('CHUTES_API_KEY', '')
@@ -495,6 +503,7 @@ def health():
     """Simple health check."""
     return jsonify({
         "status": "ok",
+        "version": APP_VERSION,
         "brain_llm": BRAIN_LLM_MODEL,
         "voice_listen_llm": CHUTES_STT_MODEL,
         "speech_llm": CHUTES_TTS_MODEL,
@@ -797,7 +806,7 @@ def _execute_voice_call(arguments: dict, session_id: str) -> str:
     return f"Unknown voice_call action: {action}"
 
 
-def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iterations: int = 5) -> str:
+def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iterations: int = 5, language: str | None = None) -> str:
     """
     🧠 Agentic tool-calling loop.
     brain_llm decides whether to call tools or respond directly.
@@ -812,17 +821,24 @@ def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iteratio
         if hotel_info.get('knowledge_base'):
             hotel_context += f"\nHotel Knowledge Base:\n{hotel_info['knowledge_base']}"
 
+    LANG_NAMES = {"en": "English", "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "es": "Spanish", "fr": "French", "de": "German", "ar": "Arabic"}
+    lang_instruction = ""
+    if language and language != "en":
+        lang_name = LANG_NAMES.get(language, language)
+        lang_instruction = f"\nYou MUST reply in {lang_name}. Do NOT use English unless the guest switches to English."
+
     system_prompt = f"""You are NomadAI, a voice-first AI hotel concierge assistant.{hotel_context}
 
 You have tools to help guests with hotel services, local recommendations, and making phone calls.
 Use tools when appropriate. Keep spoken responses concise (2-3 sentences).
 If the guest asks you to call a place, use the voice_call tool to initiate and conduct the call, then report back.
-For general conversation, just respond directly without tools.
-IMPORTANT: Always respond in the same language the guest uses. If they speak Russian, reply in Russian. If English, reply in English. Match the guest's language."""
+For general conversation, just respond directly without tools.{lang_instruction}"""
 
-    # Init or continue conversation
+    # Init or continue conversation — always update system prompt (language may change)
     if session_id not in conversations:
         conversations[session_id] = [{"role": "system", "content": system_prompt}]
+    else:
+        conversations[session_id][0] = {"role": "system", "content": system_prompt}
 
     conversations[session_id].append({"role": "user", "content": user_message})
 
@@ -1141,7 +1157,7 @@ def voice_chat():
             if not hotel_info:
                 hotel_info = DEFAULT_HOTELS.get(hotel_id)
 
-        assistant_message = agent_loop(transcription, session_id, hotel_info=hotel_info)
+        assistant_message = agent_loop(transcription, session_id, hotel_info=hotel_info, language=language)
 
         # 3) TTS (speech_llm) — stream by sentences if requested
         stream_mode = data.get("stream_tts", False)
