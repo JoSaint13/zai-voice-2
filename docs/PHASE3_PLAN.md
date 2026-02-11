@@ -27,20 +27,20 @@
 - [ ] Test cold start latency (<5s target)
 - [ ] Add `/api/health` deep check (actually ping STT/TTS endpoints)
 
-### 1.2 Error Recovery & Retry Logic
-- [ ] Add retry with exponential backoff for `call_chutes_stt()` (max 3 retries)
-- [ ] Add retry with exponential backoff for `call_chutes_tts()` (max 3 retries)
-- [ ] Add retry for `brain_chat()` / agent_loop LLM calls (max 2 retries)
-- [ ] Graceful fallback: if TTS fails after retries, return text-only response (no 502)
-- [ ] Graceful fallback: if STT fails, return user-friendly error message
-- [ ] Add timeout configuration per endpoint (STT: 30s, TTS: 15s, LLM: 60s)
+### 1.2 Error Recovery & Retry Logic ✅
+- [x] Add retry with exponential backoff for `call_chutes_stt()` (max 3 retries)
+- [x] Add retry with exponential backoff for `call_chutes_tts()` (max 3 retries)
+- [x] Add retry for `brain_chat()` / agent_loop LLM calls (max 2 retries)
+- [x] Graceful fallback: if TTS fails after retries, return text-only response (no 502)
+- [x] Graceful fallback: if STT fails, return user-friendly error message
+- [x] Add timeout configuration per endpoint (STT: 30s, TTS: 15s, LLM: 60s)
 
-### 1.3 Rate Limiting & Security
-- [ ] Add per-session rate limiting (max 20 requests/minute)
-- [ ] Add global rate limiting (max 100 requests/minute total)
-- [ ] Validate `audio_base64` size (reject >10MB payloads)
-- [ ] Sanitize user input before passing to LLM (prevent prompt injection basics)
-- [ ] Add CORS configuration for production domain only
+### 1.3 Rate Limiting & Security ✅
+- [x] Add per-session rate limiting (max 20 requests/minute)
+- [x] Add global rate limiting (max 100 requests/minute total)
+- [x] Validate `audio_base64` size (reject >10MB payloads)
+- [x] Sanitize user input before passing to LLM (prevent prompt injection basics)
+- [x] Add CORS configuration for production domain only
 
 ---
 

@@ -154,6 +154,104 @@ from src.skills.media import (
 
 app = Flask(__name__)
 
+# ── CORS Configuration ──
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")  # comma-separated list or "*"
+
+@app.after_request
+def add_cors_headers(response):
+    """Add CORS headers to all responses."""
+    origin = request.headers.get("Origin")
+    
+    # Allow all origins in development, specific in production
+    if "*" in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    elif origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    return response
+
+# ── Rate Limiting ──
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+# Rate limit storage (in-memory — use Redis in production)
+rate_limit_storage = defaultdict(list)  # {session_id: [timestamp1, timestamp2, ...]}
+global_rate_limit_storage = []  # [timestamp1, timestamp2, ...]
+
+RATE_LIMIT_PER_SESSION = 20  # requests per minute
+RATE_LIMIT_GLOBAL = 100  # total requests per minute
+MAX_AUDIO_SIZE_MB = 10
+
+def check_rate_limit(session_id: str) -> tuple[bool, str]:
+    """
+    Check rate limits (per-session and global).
+    Returns (allowed, error_message).
+    """
+    now = datetime.now()
+    minute_ago = now - timedelta(minutes=1)
+    
+    # Clean old entries
+    rate_limit_storage[session_id] = [ts for ts in rate_limit_storage[session_id] if ts > minute_ago]
+    global_rate_limit_storage[:] = [ts for ts in global_rate_limit_storage if ts > minute_ago]
+    
+    # Check per-session limit
+    if len(rate_limit_storage[session_id]) >= RATE_LIMIT_PER_SESSION:
+        return False, f"Rate limit exceeded: max {RATE_LIMIT_PER_SESSION} requests per minute per session"
+    
+    # Check global limit
+    if len(global_rate_limit_storage) >= RATE_LIMIT_GLOBAL:
+        return False, f"Server busy: max {RATE_LIMIT_GLOBAL} total requests per minute"
+    
+    # Record this request
+    rate_limit_storage[session_id].append(now)
+    global_rate_limit_storage.append(now)
+    
+    return True, ""
+
+def validate_audio_size(audio_base64: str) -> tuple[bool, str]:
+    """Validate audio payload size. Returns (valid, error_message)."""
+    if not audio_base64:
+        return True, ""
+    
+    # Base64 encoding inflates size by ~33%, so 10MB limit = ~13.3MB base64
+    size_mb = len(audio_base64) / (1024 * 1024)
+    if size_mb > MAX_AUDIO_SIZE_MB * 1.33:
+        return False, f"Audio too large: {size_mb:.1f}MB (max {MAX_AUDIO_SIZE_MB}MB)"
+    
+    return True, ""
+
+def sanitize_input(text: str) -> str:
+    """Basic input sanitization to prevent prompt injection."""
+    if not text:
+        return ""
+    
+    # Remove potential prompt injection patterns
+    dangerous_patterns = [
+        "ignore previous instructions",
+        "disregard all",
+        "forget everything",
+        "new instructions:",
+        "system:",
+        "<|im_start|>",
+        "<|im_end|>",
+    ]
+    
+    text_lower = text.lower()
+    for pattern in dangerous_patterns:
+        if pattern in text_lower:
+            logger.warning(f"[security] Potential prompt injection detected: {pattern}")
+            # Don't block, just log — false positives are common
+    
+    # Truncate very long inputs
+    if len(text) > 5000:
+        logger.warning(f"[security] Input truncated from {len(text)} to 5000 chars")
+        text = text[:5000]
+    
+    return text
+
 # Initialize skills
 SKILLS = get_all_skills()
 
@@ -1079,6 +1177,16 @@ def chat():
         session_id = data.get("session_id", "default")
         hotel_id = data.get("hotel_id")
         user_message = data["message"]
+        
+        # Rate limiting
+        allowed, error_msg = check_rate_limit(session_id)
+        if not allowed:
+            logger.warning(f"[chat] Rate limit hit: {session_id}")
+            return jsonify({"success": False, "error": error_msg}), 429
+
+        # Input sanitization
+        user_message = sanitize_input(user_message)
+        
         logger.info(f"[chat] session={session_id} brain={BRAIN_LLM_MODEL} len={len(user_message)}")
 
         # Get hotel context if available
@@ -1187,6 +1295,18 @@ def voice_chat():
 
         if not audio_b64:
             return jsonify({"error": "audio_base64 required"}), 400
+
+        # Rate limiting
+        allowed, error_msg = check_rate_limit(session_id)
+        if not allowed:
+            logger.warning(f"[voice] Rate limit hit: {session_id}")
+            return jsonify({"success": False, "error": error_msg}), 429
+
+        # Audio size validation
+        valid, error_msg = validate_audio_size(audio_b64)
+        if not valid:
+            logger.warning(f"[voice] Audio too large: {len(audio_b64)} bytes")
+            return jsonify({"success": False, "error": error_msg}), 413
 
         logger.info(f"[voice] session={session_id} hotel={hotel_id} brain={BRAIN_LLM_MODEL} tts={tts_voice or CHUTES_TTS_MODEL}")
 
