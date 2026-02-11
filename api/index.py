@@ -24,6 +24,52 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# ──────────────────────────────────────────────────────────────
+# Structured Logging & Metrics
+# ──────────────────────────────────────────────────────────────
+
+# Metrics counters
+METRICS = {
+    "start_time": time.time(),
+    "requests": {"total": 0, "chat": 0, "voice": 0, "stream": 0},
+    "latencies": {"stt": [], "llm": [], "tts": []},
+    "errors": {"stt": 0, "llm": 0, "tts": 0, "total": 0},
+    "cache": {"hits": 0, "misses": 0},
+}
+
+
+def log_structured(event: str, **kwargs):
+    """Emit structured JSON log line for observability."""
+    entry = {
+        "ts": time.time(),
+        "event": event,
+        "version": APP_VERSION,
+        **kwargs
+    }
+    logger.info(json.dumps(entry, ensure_ascii=False))
+
+
+def track_latency(category: str, latency_ms: float):
+    """Track latency for a specific category."""
+    if category in METRICS["latencies"]:
+        METRICS["latencies"][category].append(latency_ms)
+        # Keep only last 100 samples to prevent memory growth
+        if len(METRICS["latencies"][category]) > 100:
+            METRICS["latencies"][category] = METRICS["latencies"][category][-100:]
+
+
+def track_error(category: str):
+    """Track an error occurrence."""
+    if category in METRICS["errors"]:
+        METRICS["errors"][category] += 1
+    METRICS["errors"]["total"] += 1
+
+
+def get_avg_latency(category: str) -> float:
+    """Calculate average latency for a category."""
+    samples = METRICS["latencies"].get(category, [])
+    return round(sum(samples) / len(samples), 1) if samples else 0
+
 # Paths
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'hotels.db')
 PUBLIC_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
@@ -556,49 +602,84 @@ def chutes_post_json(path: str, payload: dict, stream: bool = False):
 @retry_with_backoff(max_retries=MAX_RETRIES_STT, exceptions=(requests.exceptions.RequestException, RuntimeError))
 def call_chutes_stt(audio_base64: str, language: str | None = None) -> str:
     """Call Chutes STT (Whisper v3). Returns transcription string. Retries on failure."""
-    # If direct chute endpoint provided, use it (expects audio_b64)
-    if CHUTES_STT_ENDPOINT:
+    start_time = time.time()
+    
+    try:
+        # If direct chute endpoint provided, use it (expects audio_b64)
+        if CHUTES_STT_ENDPOINT:
+            payload = {
+                "audio_b64": audio_base64,
+                "language": language,
+            }
+            # clean None keys
+            payload = {k: v for k, v in payload.items() if v is not None}
+            headers = {
+                "Authorization": f"Bearer {CHUTES_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            logger.info(f"[stt] endpoint={CHUTES_STT_ENDPOINT} payload_keys={list(payload.keys())}")
+            r = requests.post(CHUTES_STT_ENDPOINT, headers=headers, json=payload, timeout=(5, TIMEOUT_STT))
+            if r.status_code != 200:
+                try:
+                    msg = r.json()
+                except Exception:
+                    msg = r.text
+                raise _chutes_http_error(r.status_code, f"Direct STT endpoint error: {msg}")
+            data = r.json()
+            if isinstance(data, list):
+                data = data[0] if data else {}
+            if isinstance(data, str):
+                text = data
+            else:
+                text = data.get("text") or data.get("transcription") or data.get("transcript") or ""
+            logger.info(f"[stt] endpoint chars={len(text)}")
+            
+            # Structured logging
+            latency_ms = (time.time() - start_time) * 1000
+            track_latency("stt", latency_ms)
+            log_structured("stt_complete", 
+                language=language or "auto",
+                chars=len(text),
+                latency_ms=round(latency_ms, 1),
+                success=True
+            )
+            return text
+
+        # Default: central API
         payload = {
-            "audio_b64": audio_base64,
-            "language": language,
+            "model": CHUTES_STT_MODEL,
+            "audio": audio_base64,
         }
-        # clean None keys
-        payload = {k: v for k, v in payload.items() if v is not None}
-        headers = {
-            "Authorization": f"Bearer {CHUTES_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        logger.info(f"[stt] endpoint={CHUTES_STT_ENDPOINT} payload_keys={list(payload.keys())}")
-        r = requests.post(CHUTES_STT_ENDPOINT, headers=headers, json=payload, timeout=(5, TIMEOUT_STT))
-        if r.status_code != 200:
-            try:
-                msg = r.json()
-            except Exception:
-                msg = r.text
-            raise _chutes_http_error(r.status_code, f"Direct STT endpoint error: {msg}")
-        data = r.json()
-        if isinstance(data, list):
-            data = data[0] if data else {}
-        if isinstance(data, str):
-            text = data
-        else:
-            text = data.get("text") or data.get("transcription") or data.get("transcript") or ""
-        logger.info(f"[stt] endpoint chars={len(text)}")
+        if language:
+            payload["language"] = language
+
+        resp = chutes_post_json("/v1/audio/transcriptions", payload, timeout=(5, TIMEOUT_STT))
+        data = resp.json()
+        text = data.get("text") or data.get("transcription") or ""
+        logger.info(f"[stt] model={CHUTES_STT_MODEL} lang={language or 'auto'} chars={len(text)}")
+        
+        # Structured logging
+        latency_ms = (time.time() - start_time) * 1000
+        track_latency("stt", latency_ms)
+        log_structured("stt_complete", 
+            model=CHUTES_STT_MODEL,
+            language=language or "auto",
+            chars=len(text),
+            latency_ms=round(latency_ms, 1),
+            success=True
+        )
         return text
-
-    # Default: central API
-    payload = {
-        "model": CHUTES_STT_MODEL,
-        "audio": audio_base64,
-    }
-    if language:
-        payload["language"] = language
-
-    resp = chutes_post_json("/v1/audio/transcriptions", payload, timeout=(5, TIMEOUT_STT))
-    data = resp.json()
-    text = data.get("text") or data.get("transcription") or ""
-    logger.info(f"[stt] model={CHUTES_STT_MODEL} lang={language or 'auto'} chars={len(text)}")
-    return text
+    
+    except Exception as e:
+        latency_ms = (time.time() - start_time) * 1000
+        track_error("stt")
+        log_structured("stt_error",
+            language=language or "auto",
+            latency_ms=round(latency_ms, 1),
+            error=str(e)[:200],
+            success=False
+        )
+        raise
 
 
 @retry_with_backoff(max_retries=MAX_RETRIES_TTS, exceptions=(requests.exceptions.RequestException, RuntimeError))
@@ -610,70 +691,107 @@ def call_chutes_tts(text: str, voice: str | None = None, language: str | None = 
         voice: Optional voice ID (e.g., "af_heart"). If not provided, auto-selects based on language.
         language: Optional ISO 639-1 language code (e.g., "en", "ru"). Used for voice selection.
     """
-    # Auto-select voice based on language if not explicitly provided
-    if not voice:
-        if language and language in LANGUAGE_VOICES:
-            voice_model = LANGUAGE_VOICES[language]
-            logger.info(f"[tts] Auto-selected voice {voice_model} for language {language}")
-        else:
-            voice_model = "af_heart"  # fallback
-    elif voice in ("kokoro", "csm-1b"):
-        voice_model = "af_heart"  # legacy model names → default voice
-    else:
-        voice_model = voice
-        
-    if CHUTES_TTS_ENDPOINT:
-        payload = {
-            "text": text,
-            "speed": 1,
-            "voice": voice_model,
-        }
-        headers = {
-            "Authorization": f"Bearer {CHUTES_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        logger.info(f"[tts] endpoint={CHUTES_TTS_ENDPOINT} voice={voice_model} chars={len(text)}")
-        r = requests.post(CHUTES_TTS_ENDPOINT, headers=headers, json=payload, timeout=(5, TIMEOUT_TTS))
-        if r.status_code != 200:
-            try:
-                msg = r.json()
-            except Exception:
-                msg = r.text[:200]
-            raise _chutes_http_error(r.status_code, f"Direct TTS endpoint error: {msg}")
-
-        # Kokoro returns raw audio bytes (WAV) or JSON with base64
-        content_type = r.headers.get("Content-Type", "")
-        if "application/json" in content_type:
-            data = r.json()
-            if isinstance(data, list):
-                data = data[0] if data else {}
-            if isinstance(data, str):
-                audio_b64 = data
+    start_time = time.time()
+    
+    try:
+        # Auto-select voice based on language if not explicitly provided
+        if not voice:
+            if language and language in LANGUAGE_VOICES:
+                voice_model = LANGUAGE_VOICES[language]
+                logger.info(f"[tts] Auto-selected voice {voice_model} for language {language}")
             else:
-                audio_b64 = data.get("audio") or data.get("audio_base64") or data.get("data") or ""
+                voice_model = "af_heart"  # fallback
+        elif voice in ("kokoro", "csm-1b"):
+            voice_model = "af_heart"  # legacy model names → default voice
         else:
-            # Raw binary audio — encode to base64
-            import base64
-            audio_b64 = base64.b64encode(r.content).decode("utf-8")
+            voice_model = voice
+            
+        if CHUTES_TTS_ENDPOINT:
+            payload = {
+                "text": text,
+                "speed": 1,
+                "voice": voice_model,
+            }
+            headers = {
+                "Authorization": f"Bearer {CHUTES_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            logger.info(f"[tts] endpoint={CHUTES_TTS_ENDPOINT} voice={voice_model} chars={len(text)}")
+            r = requests.post(CHUTES_TTS_ENDPOINT, headers=headers, json=payload, timeout=(5, TIMEOUT_TTS))
+            if r.status_code != 200:
+                try:
+                    msg = r.json()
+                except Exception:
+                    msg = r.text[:200]
+                raise _chutes_http_error(r.status_code, f"Direct TTS endpoint error: {msg}")
 
+            # Kokoro returns raw audio bytes (WAV) or JSON with base64
+            content_type = r.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                data = r.json()
+                if isinstance(data, list):
+                    data = data[0] if data else {}
+                if isinstance(data, str):
+                    audio_b64 = data
+                else:
+                    audio_b64 = data.get("audio") or data.get("audio_base64") or data.get("data") or ""
+            else:
+                # Raw binary audio — encode to base64
+                import base64
+                audio_b64 = base64.b64encode(r.content).decode("utf-8")
+
+            if not audio_b64:
+                raise RuntimeError(f"TTS response missing audio data (content-type: {content_type})")
+            logger.info(f"[tts] endpoint voice={voice_model} chars={len(text)} audio_len={len(audio_b64)}")
+            
+            # Structured logging
+            latency_ms = (time.time() - start_time) * 1000
+            track_latency("tts", latency_ms)
+            log_structured("tts_complete",
+                voice=voice_model,
+                chars=len(text),
+                audio_bytes=len(audio_b64),
+                latency_ms=round(latency_ms, 1),
+                success=True
+            )
+            return audio_b64
+
+        # Fallback: central API
+        payload = {
+            "model": CHUTES_TTS_MODEL,
+            "input": text,
+            "format": "wav",
+        }
+        resp = chutes_post_json("/v1/audio/speech", payload, timeout=(5, TIMEOUT_TTS))
+        data = resp.json()
+        audio_b64 = data.get("audio") or data.get("audio_base64") or data.get("data")
         if not audio_b64:
-            raise RuntimeError(f"TTS response missing audio data (content-type: {content_type})")
-        logger.info(f"[tts] endpoint voice={voice_model} chars={len(text)} audio_len={len(audio_b64)}")
+            raise RuntimeError("TTS response missing audio data")
+        logger.info(f"[tts] model={CHUTES_TTS_MODEL} chars={len(text)} audio_len={len(audio_b64)}")
+        
+        # Structured logging
+        latency_ms = (time.time() - start_time) * 1000
+        track_latency("tts", latency_ms)
+        log_structured("tts_complete",
+            model=CHUTES_TTS_MODEL,
+            chars=len(text),
+            audio_bytes=len(audio_b64),
+            latency_ms=round(latency_ms, 1),
+            success=True
+        )
         return audio_b64
-
-    # Fallback: central API
-    payload = {
-        "model": CHUTES_TTS_MODEL,
-        "input": text,
-        "format": "wav",
-    }
-    resp = chutes_post_json("/v1/audio/speech", payload, timeout=(5, TIMEOUT_TTS))
-    data = resp.json()
-    audio_b64 = data.get("audio") or data.get("audio_base64") or data.get("data")
-    if not audio_b64:
-        raise RuntimeError("TTS response missing audio data")
-    logger.info(f"[tts] model={CHUTES_TTS_MODEL} chars={len(text)} audio_len={len(audio_b64)}")
-    return audio_b64
+    
+    except Exception as e:
+        latency_ms = (time.time() - start_time) * 1000
+        track_error("tts")
+        log_structured("tts_error",
+            voice=voice_model if 'voice_model' in locals() else voice,
+            chars=len(text),
+            latency_ms=round(latency_ms, 1),
+            error=str(e)[:200],
+            success=False
+        )
+        raise
 
 
 def generate_demo_response(user_message, hotel_info=None, recommendations=None):
@@ -906,6 +1024,46 @@ def clear_cache():
         "success": True,
         "cleared": stats_before["size"],
         "message": f"Cleared {stats_before['size']} cache entries"
+    })
+
+
+@app.route("/api/metrics", methods=["GET"])
+def metrics():
+    """Return observability metrics for monitoring."""
+    uptime_s = round(time.time() - METRICS["start_time"], 1)
+    
+    # Calculate average latencies
+    avg_latencies = {
+        "stt_ms": get_avg_latency("stt"),
+        "llm_ms": get_avg_latency("llm"),
+        "tts_ms": get_avg_latency("tts"),
+    }
+    
+    # Calculate cache hit rate
+    cache_stats = faq_cache.get_stats()
+    
+    return jsonify({
+        "uptime_seconds": uptime_s,
+        "requests": METRICS["requests"],
+        "latencies": {
+            "avg": avg_latencies,
+            "samples": {
+                "stt": len(METRICS["latencies"]["stt"]),
+                "llm": len(METRICS["latencies"]["llm"]),
+                "tts": len(METRICS["latencies"]["tts"]),
+            }
+        },
+        "errors": METRICS["errors"],
+        "cache": {
+            "hit_rate": cache_stats["hit_rate"],
+            "hits": cache_stats["hits"],
+            "misses": cache_stats["misses"],
+            "size": cache_stats["size"],
+        },
+        "sessions": {
+            "active": len(conversations),
+            "total_messages": sum(len(s["messages"]) for s in conversations.values())
+        }
     })
 
 
@@ -1397,14 +1555,32 @@ For general conversation, just respond directly without tools.{lang_instruction}
         }
 
         logger.info(f"[agent_loop] iteration={iteration+1}/{max_iterations} msgs={len(messages)}")
-
+        
+        llm_start = time.time()
         try:
             r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+            llm_latency_ms = (time.time() - llm_start) * 1000
         except Exception as e:
+            llm_latency_ms = (time.time() - llm_start) * 1000
+            track_error("llm")
+            log_structured("llm_error",
+                model=BRAIN_LLM_MODEL,
+                iteration=iteration+1,
+                latency_ms=round(llm_latency_ms, 1),
+                error=str(e)[:200]
+            )
             logger.error(f"[agent_loop] request failed: {e}")
             break
 
         if r.status_code != 200:
+            track_error("llm")
+            log_structured("llm_error",
+                model=BRAIN_LLM_MODEL,
+                iteration=iteration+1,
+                status_code=r.status_code,
+                latency_ms=round(llm_latency_ms, 1),
+                error=r.text[:200]
+            )
             logger.error(f"[agent_loop] brain_llm HTTP {r.status_code}: {r.text[:300]}")
             # If tools not supported, retry without tools
             if r.status_code in (400, 422):
@@ -1412,13 +1588,26 @@ For general conversation, just respond directly without tools.{lang_instruction}
                 payload.pop('tools', None)
                 payload.pop('tool_choice', None)
                 try:
+                    retry_start = time.time()
                     r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+                    retry_latency_ms = (time.time() - retry_start) * 1000
                     if r.status_code == 200:
                         data = r.json()
                         content = data['choices'][0]['message'].get('content') or ''
                         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                         messages.append({"role": "assistant", "content": content})
                         set_session_messages(session_id, messages)
+                        
+                        # Log success
+                        track_latency("llm", retry_latency_ms)
+                        log_structured("llm_complete",
+                            model=BRAIN_LLM_MODEL,
+                            iteration=iteration+1,
+                            latency_ms=round(retry_latency_ms, 1),
+                            response_chars=len(content),
+                            tool_calls=0,
+                            success=True
+                        )
                         return content
                 except Exception as e2:
                     logger.error(f"[agent_loop] retry without tools also failed: {e2}")
@@ -1451,6 +1640,16 @@ For general conversation, just respond directly without tools.{lang_instruction}
                 })
             
             set_session_messages(session_id, messages)
+            
+            # Log LLM call with tool use
+            track_latency("llm", llm_latency_ms)
+            log_structured("llm_complete",
+                model=BRAIN_LLM_MODEL,
+                iteration=iteration+1,
+                latency_ms=round(llm_latency_ms, 1),
+                tool_calls=len(msg['tool_calls']),
+                success=True
+            )
             continue  # Next iteration — let brain process tool results
 
         # Model gave a direct response (no tool calls)
@@ -1458,6 +1657,17 @@ For general conversation, just respond directly without tools.{lang_instruction}
         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
         messages.append({"role": "assistant", "content": content})
         set_session_messages(session_id, messages)
+        
+        # Log LLM call success
+        track_latency("llm", llm_latency_ms)
+        log_structured("llm_complete",
+            model=BRAIN_LLM_MODEL,
+            iteration=iteration+1,
+            latency_ms=round(llm_latency_ms, 1),
+            response_chars=len(content),
+            tool_calls=0,
+            success=True
+        )
         return content
 
     # Fallback: strip any tool messages and use simple brain_chat
@@ -1570,6 +1780,10 @@ def transcribe():
 @app.route("/api/chat", methods=["POST"])
 def chat():
     """Text-based chat with agentic tool-calling loop."""
+    request_start = time.time()
+    METRICS["requests"]["total"] += 1
+    METRICS["requests"]["chat"] += 1
+    
     try:
         data = request.get_json()
 
@@ -1584,6 +1798,7 @@ def chat():
         allowed, error_msg = check_rate_limit(session_id)
         if not allowed:
             logger.warning(f"[chat] Rate limit hit: {session_id}")
+            log_structured("rate_limit_hit", endpoint="chat", session_id=session_id)
             return jsonify({"success": False, "error": error_msg}), 429
 
         # Input sanitization
@@ -1618,12 +1833,27 @@ def chat():
             if hotel_id and is_faq_question(user_message):
                 faq_cache.set(hotel_id, user_message, assistant_message)
 
+        # Calculate e2e latency
+        e2e_latency_ms = round((time.time() - request_start) * 1000, 1)
+        
+        # Structured logging
+        log_structured("chat_complete",
+            session_id=session_id,
+            cached=cache_hit,
+            latency_ms=e2e_latency_ms,
+            response_chars=len(assistant_message),
+            success=True
+        )
+        
         return jsonify({
             "response": assistant_message,
             "brain_llm": BRAIN_LLM_MODEL,
             "success": True,
             "cached": cache_hit
-        }), 200, {"X-Cache": "HIT" if cache_hit else "MISS"}
+        }), 200, {
+            "X-Cache": "HIT" if cache_hit else "MISS",
+            "X-Latency-Total": str(e2e_latency_ms)
+        }
 
     except Exception as e:
         error_msg = get_user_friendly_error(e)
@@ -1706,6 +1936,10 @@ def chat_stream():
 @app.route("/api/voice-chat", methods=["POST"])
 def voice_chat():
     """Voice chat: STT -> LLM -> TTS. Graceful fallbacks on failures."""
+    request_start = time.time()
+    METRICS["requests"]["total"] += 1
+    METRICS["requests"]["voice"] += 1
+    
     try:
         data = request.get_json() or {}
         audio_b64 = data.get("audio_base64")
@@ -1722,6 +1956,7 @@ def voice_chat():
         allowed, error_msg = check_rate_limit(session_id)
         if not allowed:
             logger.warning(f"[voice] Rate limit hit: {session_id}")
+            log_structured("rate_limit_hit", endpoint="voice", session_id=session_id)
             return jsonify({"success": False, "error": error_msg}), 429
 
         # Audio size validation
@@ -1786,6 +2021,13 @@ def voice_chat():
         except Exception as e:
             logger.error(f"[voice] TTS failed after retries: {e}. Returning text-only response.")
             # Graceful degradation: return text without audio
+            e2e_latency_ms = round((time.time() - request_start) * 1000, 1)
+            log_structured("voice_chat_complete",
+                session_id=session_id,
+                tts_failed=True,
+                latency_ms=e2e_latency_ms,
+                success=True
+            )
             return jsonify({
                 "success": True,
                 "transcription": transcription,
@@ -1795,8 +2037,17 @@ def voice_chat():
                 "brain_llm": BRAIN_LLM_MODEL,
                 "hotel_id": hotel_id,
                 "session_id": session_id
-            })
+            }), 200, {"X-Latency-Total": str(e2e_latency_ms)}
 
+        e2e_latency_ms = round((time.time() - request_start) * 1000, 1)
+        log_structured("voice_chat_complete",
+            session_id=session_id,
+            latency_ms=e2e_latency_ms,
+            transcription_chars=len(transcription),
+            response_chars=len(assistant_message),
+            success=True
+        )
+        
         return jsonify({
             "success": True,
             "transcription": transcription,
@@ -1805,7 +2056,7 @@ def voice_chat():
             "brain_llm": BRAIN_LLM_MODEL,
             "hotel_id": hotel_id,
             "session_id": session_id
-        })
+        }), 200, {"X-Latency-Total": str(e2e_latency_ms)}
 
     except RuntimeError as e:
         sc = getattr(e, 'status_code', 500)
