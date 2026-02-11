@@ -2,7 +2,7 @@
 
 > **NomadAI** - Voice-first hotel smart assistant powered by Chutes.ai
 
-**Version:** 0.1.0 | **Status:** MVP Complete | **Last Updated:** 2026-02-08
+**Version:** 0.2.0 | **Status:** Alpha | **Last Updated:** 2026-02-11
 
 ---
 
@@ -39,7 +39,6 @@
 ### For Developers
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical design
 - [docs/readers/DEVELOPER.md](readers/DEVELOPER.md) - Developer guide
-- [TESTING.md](../TESTING.md) - Testing guide
 
 ### For Operations
 - [docs/readers/OPERATIONS.md](readers/OPERATIONS.md) - Deployment & monitoring
@@ -51,12 +50,14 @@
 ```
 zai-voice-2/
 ├── api/                    # Flask API server
-│   └── index.py            # Main API endpoints
+│   ├── index.py            # Main API (~1370 lines, agent loop)
+│   └── requirements.txt    # Vercel Python dependencies
 ├── public/                 # Web frontend
-│   └── index.html          # Voice UI
+│   └── index.html          # Voice UI (~1200 lines, mobile-first)
 ├── src/                    # Core source code
 │   └── skills/             # Skill implementations
 │       ├── base.py         # BaseSkill, Registry
+│       ├── chat_provider.py# Shared chat function
 │       ├── concierge.py    # Hotel services
 │       ├── sightseeing.py  # Local recommendations
 │       └── media.py        # Image/video generation
@@ -75,6 +76,8 @@ zai-voice-2/
 │       ├── BUSINESS.md
 │       ├── DEVELOPER.md
 │       └── OPERATIONS.md
+├── CHANGELOG.md            # Version history
+├── Makefile                # Build/dev commands
 └── README.md               # Project entry point
 ```
 
@@ -84,10 +87,10 @@ zai-voice-2/
 
 | Component | Technology | Documentation |
 |-----------|------------|---------------|
-| Conversation | Chutes.ai (DeepSeek/Qwen) | Chutes.ai chat completions |
-| Translation | Chutes.ai | Built-in translation via chat models |
-| Speech Recognition | — | Not configured |
-| Image/Video Generation | — | Not available |
+| 🧠 Brain LLM | Chutes.ai (MiMo-V2-Flash) | Reasoning, tool-calling agent loop |
+| 🎧 Speech-to-Text | Chutes.ai (Whisper Large V3) | Voice transcription |
+| 🔊 Text-to-Speech | Chutes.ai (Kokoro) | Voice synthesis (raw WAV) |
+| Translation | Brain LLM | Built-in translation via chat models |
 | Backend | Flask/Python | [Flask Docs](https://flask.palletsprojects.com/) |
 | Deployment | Vercel | [Vercel Docs](https://vercel.com/docs) |
 
@@ -97,6 +100,7 @@ zai-voice-2/
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.2.0 | 2026-02-11 | Agentic architecture, STT/TTS, tool-calling, wake word, TTS streaming |
 | 0.1.0 | 2026-02-08 | Initial voice pipeline, skill system |
 
 ---

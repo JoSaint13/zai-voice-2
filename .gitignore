@@ -29,6 +29,11 @@ Thumbs.db
 # Vercel
 .vercel/
 
+# Logs & temp data
+*.log
+nohup.out
+*.db
+
 # Audio temp files
 *.wav
 *.webm

@@ -2,7 +2,7 @@
 
 > Phased implementation plan from MVP to full product
 
-**Version:** 0.1.0 | **Current Phase:** Phase 1 Complete | **Last Updated:** 2026-02-08
+**Version:** 0.2.0 | **Current Phase:** Phase 2 Complete | **Last Updated:** 2026-02-11
 
 ---
 
@@ -10,7 +10,7 @@
 
 ```
 Phase 1: Foundation     ████████████████████ 100% ✅ COMPLETE
-Phase 2: Skills         ░░░░░░░░░░░░░░░░░░░░   0% ⏳ STARTING
+Phase 2: Skills         ████████████████████ 100% ✅ COMPLETE
 Phase 3: PMS            ░░░░░░░░░░░░░░░░░░░░   0% 📋 PLANNED
 Phase 4: Omnichannel    ░░░░░░░░░░░░░░░░░░░░   0% 📋 PLANNED
 Phase 5: Revenue        ░░░░░░░░░░░░░░░░░░░░   0% 📋 PLANNED
@@ -27,10 +27,10 @@ Phase 5: Revenue        ░░░░░░░░░░░░░░░░░░�
 │   Week 1-2  │   Week 3-4  │   Month 2   │   Month 3   │      Month 4+       │
 │  Foundation │   Skills    │     PMS     │ Omnichannel │      Revenue        │
 ├─────────────┼─────────────┼─────────────┼─────────────┼─────────────────────┤
-│ ✅ Voice    │ ⏳ Intent   │ 📋 Mews    │ 📋 WhatsApp │ 📋 Upsell Engine   │
-│ ✅ Web UI   │ ⏳ Concierge│ 📋 Cloudbeds│ 📋 SMS     │ 📋 Analytics       │
-│ ✅ Deploy   │ ⏳ Sightsee │ 📋 Billing │ 📋 In-room │ 📋 A/B Testing     │
-│ ✅ Skills   │ ⏳ Media    │ 📋 Keys    │ 📋 Tablet  │ 📋 Partnerships    │
+│ ✅ Voice    │ ✅ Agent   │ 📋 Mews    │ 📋 WhatsApp │ 📋 Upsell Engine   │
+│ ✅ Web UI   │ ✅ Tools   │ 📋 Cloudbeds│ 📋 SMS     │ 📋 Analytics       │
+│ ✅ Deploy   │ ✅ Voice   │ 📋 Billing │ 📋 In-room │ 📋 A/B Testing     │
+│ ✅ Skills   │ ✅ Wake    │ 📋 Keys    │ 📋 Tablet  │ 📋 Partnerships    │
 └─────────────┴─────────────┴─────────────┴─────────────┴─────────────────────┘
 
 Legend: ✅ Done  ⏳ In Progress  📋 Planned
@@ -49,62 +49,63 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 
 | Task | Status | Owner | Notes |
 |------|--------|-------|-------|
-| ASR integration | ⚠️ Pending | Dev | Speech-to-text not yet configured |
-| Chutes.ai chat integration | ✅ Done | Dev | Conversation working |
-| Web UI with voice recording | ✅ Done | Dev | Hold-to-speak interface |
+| ASR integration | ✅ Done | Dev | Whisper Large V3 via Chutes.ai |
+| Chutes.ai chat integration | ✅ Done | Dev | MiMo-V2-Flash brain LLM |
+| Web UI with voice recording | ✅ Done | Dev | Hold-to-speak + VAD |
 | Vercel deployment | ✅ Done | Dev | Auto-deploy on push |
 | Skill system architecture | ✅ Done | Brain | BaseSkill, Registry, Context |
 | Concierge skill stubs | ✅ Done | Dev | 8 skills defined |
 | Sightseeing skill stubs | ✅ Done | Dev | 8 skills defined |
-| Media skill stubs | ⚠️ Pending | Dev | Image/video gen not available |
+| TTS integration | ✅ Done | Dev | Kokoro via Chutes.ai |
 | Test framework | ✅ Done | Runner | pytest + demo script |
 | Documentation | ✅ Done | Brain | PRD, Architecture, Guides |
 
 ### Metrics Achieved
-- [x] Voice pipeline working end-to-end
+- [x] Voice pipeline working end-to-end (STT + TTS)
 - [x] <3s response latency
 - [x] Deployed to production URL
-- [x] 18 skills defined
+- [x] 8 tool schemas implemented
 
 ---
 
-## Phase 2: Skill Implementation (Week 3-4) ⏳ IN PROGRESS
+## Phase 2: Agentic Skills (Week 3-4) ✅ COMPLETE
 
 ### Objectives
-- Implement intent routing with Chutes.ai (DeepSeek/Qwen)
-- Build functional concierge and sightseeing skills
-- Integrate media generation
+- Replace intent classification with agentic tool-calling architecture
+- Implement agent_loop() with MiMo-V2-Flash brain LLM
+- Full voice pipeline: Whisper STT → agent loop → Kokoro TTS
 
-### Sprint 1 (Week 3): Core Skills
+### Sprint 1 (Week 3): Core Agent Architecture
 
-| Task | Priority | Owner | Estimate |
-|------|----------|-------|----------|
-| Intent router with Chutes.ai model | P0 | Brain | 2 days |
-| Wire skills to API endpoints | P0 | Dev | 1 day |
-| Room service skill | P1 | Dev | 1 day |
-| Housekeeping skill | P1 | Dev | 1 day |
-| Amenities info skill | P1 | Dev | 0.5 day |
-| WiFi/FAQ skill | P1 | Dev | 0.5 day |
-| Integration tests | P1 | Runner | 1 day |
+| Task | Priority | Owner | Status |
+|------|----------|-------|--------|
+| Agent loop with tool-calling | P0 | Brain | ✅ Done |
+| 8 tool schemas defined | P0 | Dev | ✅ Done |
+| Room service tool | P1 | Dev | ✅ Done |
+| Housekeeping tool | P1 | Dev | ✅ Done |
+| Amenities info tool | P1 | Dev | ✅ Done |
+| WiFi info tool | P1 | Dev | ✅ Done |
+| Integration tests | P1 | Runner | ✅ Done |
 
-### Sprint 2 (Week 4): Advanced Skills
+### Sprint 2 (Week 4): Voice & Advanced Features
 
-| Task | Priority | Owner | Estimate |
-|------|----------|-------|----------|
-| Local recommendations (RAG) | P1 | Dev | 2 days |
-| Itinerary planning | P2 | Dev | 1 day |
-| Directions (OpenStreetMap) | P2 | Dev | 1 day |
-| Image generation (provider TBD) | P2 | Dev | 1 day |
-| Video generation (provider TBD) | P3 | Dev | 1 day |
-| Multi-language testing | P1 | Runner | 1 day |
-| Production hardening | P1 | Dev | 1 day |
+| Task | Priority | Owner | Status |
+|------|----------|-------|--------|
+| Local recommendations tool | P1 | Dev | ✅ Done |
+| Itinerary planning tool | P2 | Dev | ✅ Done |
+| Mock voice call simulation | P2 | Dev | ✅ Done |
+| Wake word detection | P1 | Dev | ✅ Done |
+| TTS streaming via SSE | P1 | Dev | ✅ Done |
+| Language selector (9 languages) | P1 | Dev | ✅ Done |
+| Streaming chat (SSE) | P1 | Dev | ✅ Done |
 
 ### Success Criteria
-- [ ] Intent routing >90% accuracy
-- [ ] 8 concierge skills functional
-- [ ] 5 sightseeing skills functional
-- [ ] Image generation working
-- [ ] 5 languages validated
+- [x] Agentic tool-calling replacing intent router
+- [x] 8 tools functional via agent loop
+- [x] Full voice pipeline (STT → agent → TTS)
+- [x] Wake word detection working
+- [x] TTS streaming via SSE
+- [x] 9 languages selectable
 
 ---
 
@@ -266,18 +267,18 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 ## Next Actions
 
 ### This Week
-1. [ ] Implement intent router
-2. [ ] Wire concierge skills to API
-3. [ ] Test room service flow end-to-end
-4. [ ] Validate 3 languages (EN, ZH, ES)
-
-### Next Week
-1. [ ] Complete sightseeing skills
-2. [ ] Integrate CogView-4 for images
+1. [ ] Set up PMS sandbox accounts (Mews, Cloudbeds)
+2. [ ] Design PMS tool schemas (`check_reservation`, `post_charge`)
 3. [ ] Load test with 50 concurrent users
 4. [ ] Prepare pilot hotel demo
 
+### Next Week
+1. [ ] Begin Mews API integration
+2. [ ] Replace mock voice_call with real telephony (Twilio/VAPI)
+3. [ ] Add response caching for common queries
+4. [ ] Improve error handling and retry logic
+
 ---
 
-**Last Updated:** 2026-02-08
-**Next Review:** 2026-02-15
+**Last Updated:** 2026-02-11
+**Next Review:** 2026-02-18

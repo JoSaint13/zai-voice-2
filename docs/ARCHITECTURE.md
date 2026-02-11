@@ -1,408 +1,238 @@
 # NomadAI Voice Agent - Architecture Design
 
-**Version:** 1.0
-**Date:** 2026-02-08
+**Version:** 2.0
+**Date:** 2026-02-11
 **Status:** Approved
 
 ---
 
 ## 1. System Overview
 
-NomadAI Voice Agent is a voice-first digital concierge system built on Chutes.ai model stack. This document describes the architecture for intent routing, skill management, agent communication, state management, and error handling.
+NomadAI Voice Agent is a voice-first digital concierge built on an **OpenClaw-inspired agentic architecture** with tool-calling. Instead of intent classification and skill routing, a brain LLM autonomously decides which tools to invoke in a loop — enabling flexible, multi-step task completion.
 
 ### Core Design Principles
 
-1. **Extensibility**: New skills can be added without modifying core routing logic
-2. **Separation of Concerns**: Each agent handles a specific domain
+1. **Agentic Autonomy**: The brain LLM decides which tools to call — no hardcoded routing
+2. **Extensibility**: New capabilities are added as tool schemas, not code branches
 3. **Graceful Degradation**: System remains functional when individual components fail
 4. **Stateless Processing**: Request handlers are stateless; state is externalized
 5. **Observable**: All operations are logged and traceable
 
 ---
 
-## 2. Intent Router Design
+## 2. Named LLM Roles
 
-The Intent Router is the central dispatcher that classifies user intents and routes requests to the appropriate skill handler.
+| Role | Model | Endpoint | Purpose |
+|------|-------|----------|---------|
+| 🧠 Brain LLM | MiMo-V2-Flash | `https://llm.chutes.ai/v1/chat/completions` | Reasoning, routing, tool-calling |
+| 🎧 Voice Listen | Whisper Large V3 | `https://chutes-whisper-large-v3.chutes.ai/transcribe` | Speech-to-text |
+| 🔊 Speech | Kokoro | `https://chutes-kokoro.chutes.ai/speak` | Text-to-speech (raw WAV) |
 
-### 2.1 Intent Categories
+All models are served via **Chutes.ai** (decentralized inference on Bittensor), authenticated with `CHUTES_API_KEY` Bearer token.
 
-| Category | Description | Agent | Examples |
-|----------|-------------|-------|----------|
-| `concierge` | Hotel service requests | ConciergeAgent | Room service, housekeeping, WiFi |
-| `sightseeing` | Local exploration | SightseeingAgent | Recommendations, directions, booking |
-| `media` | Content generation | MediaAgent | Images, videos of destinations |
-| `system` | Agent control | SystemAgent | Language switch, repeat, handoff |
+---
 
-### 2.2 Classification Architecture
+## 3. Agent Loop Architecture
+
+### 3.1 The Agent Loop (`agent_loop()`)
+
+The core of the system is an iterative agent loop:
 
 ```
                     +------------------+
-                    |   User Input     |
-                    | (transcribed)    |
+                    |   User Message   |
                     +--------+---------+
                              |
                              v
                     +------------------+
-                    |  Intent Router   |
-                    |   (Chutes LLM)      |
+                    |   brain_chat()   |
+                    |  (MiMo-V2-Flash) |
+                    |  messages + tools |
                     +--------+---------+
                              |
-              +--------------+--------------+
-              |              |              |
-              v              v              v
-    +------------------+  +------------------+  +------------------+
-    | Primary Intent   |  | Confidence Score |  | Extracted        |
-    | (category)       |  | (0.0 - 1.0)      |  | Entities         |
-    +------------------+  +------------------+  +------------------+
+                    +--------+---------+
+                    |  tool_calls?     |
+                    +--------+---------+
+                      |              |
+                   YES|              |NO
+                      v              v
+              +--------------+  +--------------+
+              | Execute each |  | Return final |
+              | tool_call    |  | text response|
+              | Add results  |  +--------------+
+              | to messages  |
+              +--------------+
+                      |
+                      v
+              +--------------+
+              | Loop again   |
+              | (max 5 iter) |
+              +--------------+
 ```
 
-### 2.3 Classification Prompt Template
+### 3.2 Tool-Calling Flow
 
-The router uses a structured prompt to classify intents:
+1. User message is added to conversation history
+2. `brain_chat()` sends messages + 8 tool schemas to brain LLM
+3. If response contains `tool_calls`:
+   - Each tool call is dispatched to `_execute_tool(name, args)`
+   - Tool results are appended as `tool` role messages
+   - Loop back to step 2
+4. If response is plain text: return to user
+5. Max 5 iterations to prevent infinite loops
 
-```
-You are an intent classifier for a hotel voice assistant.
+### 3.3 Tool Schemas (8 total)
 
-Given the user utterance, classify into exactly one category:
-- concierge: Hotel services (room service, housekeeping, amenities, WiFi, checkout, complaints)
-- sightseeing: Local exploration (recommendations, directions, booking tours, events)
-- media: Visual content requests (show me, create image/video of destinations)
-- system: Agent control (language change, repeat, speak slower, human handoff)
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `room_service` | item, quantity, room, notes | Order food/drinks to room |
+| `housekeeping` | request_type, room, urgency | Request cleaning, towels, supplies |
+| `amenities_info` | amenity_type | Pool, gym, spa hours and details |
+| `wifi_info` | issue_type | Network name, password, troubleshooting |
+| `local_recommendations` | category, preferences, budget | Restaurants, attractions, shopping |
+| `itinerary_plan` | duration, interests, pace | Day plans and activity scheduling |
+| `voice_call` | venue, purpose | Simulated calls to restaurants/venues |
+| `translate` | text, target_language | Translate text between languages |
 
-Also extract relevant entities and assign a confidence score.
-
-User: "{utterance}"
-Context: {context}
-
-Respond in JSON format:
-{
-  "category": "<category>",
-  "skill_hint": "<skill_id or null>",
-  "confidence": <0.0-1.0>,
-  "entities": {...},
-  "reasoning": "<brief explanation>"
-}
-```
-
-### 2.4 Routing Decision Flow
-
-```
-1. Receive transcribed text + conversation context
-2. Call Chutes LLM with classification prompt
-3. Parse JSON response
-4. If confidence < 0.6:
-   - Ask clarifying question
-5. If confidence >= 0.6:
-   - Route to category agent
-6. Agent executes skill and returns response
-7. Response sent to TTS for voice output
-```
-
-### 2.5 Skill ID Hints
-
-The router can provide a hint for the specific skill within a category:
-
-| Category | Skill Hints |
-|----------|-------------|
-| concierge | `CON-001` to `CON-008` |
-| sightseeing | `SEE-001` to `SEE-008` |
-| system | `SYS-001` to `SYS-005` |
-| media | `MED-001` (image), `MED-002` (video) |
-
----
-
-## 3. Skill Registry Pattern
-
-The Skill Registry provides a plugin-based architecture for skill management.
-
-### 3.1 Registry Architecture
-
-```
-+------------------------------------------------------------------+
-|                         SkillRegistry                             |
-|  +------------------------------------------------------------+  |
-|  |                    Registered Skills                        |  |
-|  |  +------------+  +------------+  +------------+             |  |
-|  |  | CON-001    |  | SEE-001    |  | SYS-001    |   ...       |  |
-|  |  | RoomSvc    |  | LocalRec   |  | LangSwitch |             |  |
-|  |  +------------+  +------------+  +------------+             |  |
-|  +------------------------------------------------------------+  |
-|                                                                   |
-|  Methods:                                                         |
-|  - register(skill: BaseSkill) -> None                            |
-|  - get(skill_id: str) -> BaseSkill                               |
-|  - list_by_category(category: str) -> List[BaseSkill]            |
-|  - match(utterance: str, category: str) -> Optional[BaseSkill]   |
-+------------------------------------------------------------------+
-```
-
-### 3.2 Skill Metadata Structure
-
-Each skill defines metadata for discovery and routing:
+### 3.4 Tool Execution
 
 ```python
-@dataclass
-class SkillMetadata:
-    skill_id: str          # Unique identifier (e.g., "CON-001")
-    name: str              # Human-readable name
-    category: str          # concierge | sightseeing | media | system
-    description: str       # What the skill does
-    example_utterances: List[str]  # Training examples
-    required_entities: List[str]   # Entities needed to execute
-    optional_entities: List[str]   # Entities that enhance execution
-    version: str           # Semantic version
-```
-
-### 3.3 Registration Pattern
-
-Skills are registered at application startup:
-
-```python
-# Auto-discovery pattern
-from skills import concierge, sightseeing, media, system
-
-registry = SkillRegistry()
-
-# Register all skills from modules
-for module in [concierge, sightseeing, media, system]:
-    for skill_class in module.SKILLS:
-        registry.register(skill_class())
-```
-
-### 3.4 Skill Invocation Flow
-
-```
-1. Router identifies category + skill_hint
-2. Registry.get(skill_id) returns skill instance
-3. Skill.validate(context) checks prerequisites
-4. Skill.execute(context) performs action
-5. Skill returns SkillResponse
-6. Response formatted for TTS output
+def _execute_tool(name: str, args: dict) -> str:
+    """Dispatch tool call to handler function."""
+    handlers = {
+        "room_service": _execute_room_service,
+        "housekeeping": _execute_housekeeping,
+        "amenities_info": _execute_amenities_info,
+        "wifi_info": _execute_wifi_info,
+        "local_recommendations": _execute_local_recommendations,
+        "itinerary_plan": _execute_itinerary_plan,
+        "voice_call": _execute_voice_call,
+        "translate": _execute_translate,
+    }
+    return handlers[name](args)
 ```
 
 ---
 
-## 4. Agent Communication Flow
+## 4. Voice Pipeline
 
-### 4.1 Request-Response Pipeline
-
-```
-+--------+    +-------+    +--------+    +-------+    +--------+
-| Client | -> | ASR   | -> | Router | -> | Agent | -> | TTS    |
-| (Web/  |    | (TBD) |    | Intent |    | Skill |    | (TBD)  |
-| App)   |    |       |    | Class. |    | Exec  |    |        |
-+--------+    +-------+    +--------+    +-------+    +--------+
-    ^                                                      |
-    |                                                      |
-    +------------------------------------------------------+
-                        Audio Response
-```
-
-### 4.2 Context Object
-
-All components share a unified context object:
-
-```python
-@dataclass
-class ConversationContext:
-    session_id: str
-    guest_id: Optional[str]
-    room_number: Optional[str]
-    language: str
-    conversation_history: List[Message]
-    current_intent: Optional[ClassifiedIntent]
-    active_skill: Optional[str]
-    entities: Dict[str, Any]
-    preferences: Dict[str, Any]
-    timestamp: datetime
-```
-
-### 4.3 Message Types
-
-```python
-class MessageType(Enum):
-    USER_AUDIO = "user_audio"
-    USER_TEXT = "user_text"
-    TRANSCRIPTION = "transcription"
-    INTENT = "intent"
-    SKILL_REQUEST = "skill_request"
-    SKILL_RESPONSE = "skill_response"
-    AGENT_RESPONSE = "agent_response"
-    TTS_AUDIO = "tts_audio"
-    ERROR = "error"
-```
-
-### 4.4 Inter-Agent Communication
-
-Agents can delegate to other agents:
+### 4.1 Voice Chat Flow
 
 ```
-Guest: "I want to book that ramen place you mentioned"
-
-1. SightseeingAgent receives request
-2. Identifies need for booking (SEE-005)
-3. SEE-005 requires confirmation
-4. Delegates to SystemAgent for confirmation flow
-5. On confirm, SEE-005 calls booking API
-6. Returns result to guest
+Guest                 Web App              API Server           Chutes.ai
+  |                      |                    |                    |
+  |---(1) Hold-to-speak->|                    |                    |
+  |  (audio + VAD)       |                    |                    |
+  |                      |---(2) POST /api/voice-chat------------>|
+  |                      |       audio file   |                    |
+  |                      |                    |---(3) Whisper STT->|
+  |                      |                    |<---(4) Text--------|
+  |                      |                    |                    |
+  |                      |                    |---(5) agent_loop-->|
+  |                      |                    |  (may loop with    |
+  |                      |                    |   tool calls)      |
+  |                      |                    |<---(6) Response----|
+  |                      |                    |                    |
+  |                      |                    |---(7) Kokoro TTS-->|
+  |                      |<---(8) SSE audio---|<---(8) WAV---------|
+  |<---(9) Play audio----|  (sentence chunks) |                    |
 ```
+
+### 4.2 TTS Streaming
+
+When `stream_tts=true`, the response is streamed via SSE:
+- Text is split into sentences
+- Each sentence is sent to Kokoro TTS independently
+- Audio chunks (base64 WAV) are streamed as SSE events
+- Client plays chunks sequentially for low-latency output
+
+### 4.3 Wake Word Detection
+
+The web UI uses Web Speech API for continuous listening:
+- Configurable trigger phrases: "hey nomad", "привет номад"
+- On detection, automatically starts recording
+- Language-aware (matches selected language)
 
 ---
 
-## 5. State Management Approach
+## 5. State Management
 
-### 5.1 State Layers
+### 5.1 Session State
 
-```
-+-------------------------------------------------------------------+
-|                      State Architecture                            |
-+-------------------------------------------------------------------+
-|                                                                    |
-|  +------------------+  +------------------+  +------------------+  |
-|  | Session State    |  | Conversation     |  | Persistent       |  |
-|  | (Redis/Memory)   |  | State (Context)  |  | State (DB)       |  |
-|  +------------------+  +------------------+  +------------------+  |
-|  | - Active skill   |  | - Message history|  | - Guest profile  |  |
-|  | - Pending action |  | - Entities       |  | - Preferences    |  |
-|  | - Temp data      |  | - Current intent |  | - Past requests  |  |
-|  | TTL: 30 minutes  |  | TTL: 1 hour      |  | TTL: Permanent   |  |
-|  +------------------+  +------------------+  +------------------+  |
-|                                                                    |
-+-------------------------------------------------------------------+
-```
-
-### 5.2 State Store Interface
+Session state is stored **in-memory** on the server:
 
 ```python
-class StateStore(Protocol):
-    async def get(self, key: str) -> Optional[Any]: ...
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None: ...
-    async def delete(self, key: str) -> None: ...
-    async def exists(self, key: str) -> bool: ...
+sessions = {}  # session_id -> {messages: [], language: "en", ...}
 ```
 
-### 5.3 Context Persistence
+- Conversation history (messages array for brain LLM)
+- Selected language
+- Session metadata
 
-```python
-class ContextManager:
-    def __init__(self, store: StateStore):
-        self.store = store
+> **Note:** In-memory state does not persist across Vercel cold starts.
 
-    async def get_context(self, session_id: str) -> ConversationContext:
-        """Retrieve or create conversation context."""
-        ...
+### 5.2 Context Flow
 
-    async def save_context(self, context: ConversationContext) -> None:
-        """Persist context to store."""
-        ...
-
-    async def clear_context(self, session_id: str) -> None:
-        """Clear context (for reset skill)."""
-        ...
-```
-
-### 5.4 Slot Filling State Machine
-
-For multi-turn skills that require gathering information:
-
-```
-States: IDLE -> GATHERING -> CONFIRMING -> EXECUTING -> COMPLETE
-
-Example (Room Service):
-1. IDLE: Guest says "I want breakfast"
-2. GATHERING: "What would you like? We have eggs, pancakes..."
-3. GATHERING: "Eggs please" -> entities["item"] = "eggs"
-4. GATHERING: "How would you like them?" (missing: preparation)
-5. GATHERING: "Scrambled" -> entities["preparation"] = "scrambled"
-6. CONFIRMING: "Scrambled eggs for room 302. Confirm?"
-7. EXECUTING: "Yes" -> Create order in PMS
-8. COMPLETE: "Your breakfast will arrive in 20 minutes"
-```
+The conversation context follows OpenAI chat format:
+- `system` message: hotel concierge persona + language instruction
+- `user` messages: guest utterances
+- `assistant` messages: brain LLM responses
+- `tool` messages: tool execution results
 
 ---
 
-## 6. Error Handling Strategy
+## 6. API Design
 
-### 6.1 Error Categories
+### 6.1 Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/chat` | POST | Text chat via agent_loop |
+| `/api/chat-stream` | POST | Streaming text chat via SSE |
+| `/api/voice-chat` | POST | STT → agent_loop → TTS |
+| `/api/transcribe` | POST | Standalone STT |
+| `/api/translate` | POST | Translation via brain LLM |
+| `/api/health` | GET | Health check with version, model info |
+| `/api/providers` | GET | List available models |
+| `/api/reset` | POST | Clear session |
+
+### 6.2 Mock Voice Call
+
+`_execute_voice_call()` simulates calling restaurants/venues:
+- Returns mock responses for reservations, menus, hours
+- Structured as a realistic phone call transcript
+- Planned: replace with real telephony integration
+
+---
+
+## 7. Error Handling Strategy
+
+### 7.1 Error Categories
 
 | Category | Examples | Response Strategy |
 |----------|----------|-------------------|
-| `recognition_error` | ASR failure, unclear audio | "I didn't catch that, could you repeat?" |
-| `intent_unclear` | Low confidence classification | "Did you mean X or Y?" |
-| `skill_error` | Skill execution failure | "Sorry, I couldn't complete that. Let me try again." |
+| `recognition_error` | STT failure, unclear audio | "I didn't catch that, could you repeat?" |
+| `tool_error` | Tool execution failure | Brain LLM informed via tool result, retries |
 | `backend_error` | API/service unavailable | "I'm having trouble connecting. Please try again." |
-| `validation_error` | Missing required entities | "I need to know X to help you with that." |
-| `permission_error` | Unauthorized action | "I'll need to connect you with staff for that." |
+| `loop_limit` | Agent loop hits max iterations | Return best partial response |
 
-### 6.2 Error Response Structure
-
-```python
-@dataclass
-class ErrorResponse:
-    error_code: str
-    category: str
-    message: str  # User-friendly message
-    technical_details: Optional[str]  # For logging
-    recovery_action: Optional[str]  # Suggested next step
-    escalate: bool  # Should we involve human?
-```
-
-### 6.3 Retry Strategy
-
-```python
-class RetryConfig:
-    max_attempts: int = 3
-    backoff_base: float = 1.0  # seconds
-    backoff_multiplier: float = 2.0
-    retriable_errors: List[str] = ["backend_error", "timeout"]
-
-async def with_retry(func, config: RetryConfig):
-    for attempt in range(config.max_attempts):
-        try:
-            return await func()
-        except RetriableError as e:
-            if attempt == config.max_attempts - 1:
-                raise
-            wait = config.backoff_base * (config.backoff_multiplier ** attempt)
-            await asyncio.sleep(wait)
-```
-
-### 6.4 Graceful Degradation
+### 7.2 Graceful Degradation
 
 ```
-Level 1: Primary Service Unavailable
-  -> Use cached responses for common queries
+Level 1: Tool Execution Fails
+  -> Tool returns error message to brain LLM
+  -> Brain LLM responds conversationally without tool
 
-Level 2: Chutes LLM Unavailable
-  -> Fallback to pattern matching for basic intents
-  -> Escalate complex queries to human
-
-Level 3: Complete Outage
+Level 2: Brain LLM Unavailable
   -> Return static "experiencing difficulties" message
-  -> Provide direct phone number to front desk
-```
 
-### 6.5 Human Handoff Protocol
-
-```python
-class HandoffTrigger(Enum):
-    EXPLICIT_REQUEST = "guest requested human"
-    REPEATED_FAILURES = "3+ failed attempts"
-    SENSITIVE_TOPIC = "complaint or safety issue"
-    LOW_CONFIDENCE = "persistent low confidence"
-    TIMEOUT = "no response in 30 seconds"
-
-async def initiate_handoff(context: ConversationContext, trigger: HandoffTrigger):
-    1. Log handoff reason and context
-    2. Notify front desk via PMS integration
-    3. Provide guest with wait time estimate
-    4. Transfer conversation transcript to staff
-    5. Keep session alive for seamless transition
+Level 3: STT/TTS Unavailable
+  -> Fall back to text-only chat mode
 ```
 
 ---
 
-## 7. Component Diagram
+## 8. Component Diagram
 
 ```
 +------------------------------------------------------------------+
@@ -410,34 +240,26 @@ async def initiate_handoff(context: ConversationContext, trigger: HandoffTrigger
 +------------------------------------------------------------------+
 |                                                                    |
 |  +------------------+       +------------------+                   |
-|  |    Interfaces    |       |    Core Engine   |                   |
+|  |    Interfaces    |       |   Agent Engine   |                   |
 |  +------------------+       +------------------+                   |
-|  | - Web App        |       | - IntentRouter   |                   |
-|  | - WhatsApp       |  -->  | - SkillRegistry  |                   |
-|  | - SMS Gateway    |       | - ContextManager |                   |
-|  | - In-Room Device |       | - AgentOrch.     |                   |
+|  | - Web App (HTML) |       | - agent_loop()   |                   |
+|  | - Chat tab       |  -->  | - brain_chat()   |                   |
+|  | - Voice tab      |       | - _execute_tool()|                   |
+|  | - Translate tab  |       | - Tool schemas   |                   |
 |  +------------------+       +------------------+                   |
 |                                    |                               |
 |                                    v                               |
 |  +------------------+       +------------------+                   |
-|  |    AI Services   |       |     Agents       |                   |
+|  |   AI Services    |       |   Tool Handlers  |                   |
 |  +------------------+       +------------------+                   |
-|  | - ASR (not configured)   |  <->  | - ConciergeAgent |                   |
-|  | - Chutes LLM        |       | - SightseeingAgt |                   |
-|  | - TTS (not configured)    |       | - MediaAgent     |                   |
-|  | - Image generation (not available)      |       | - SystemAgent    |                   |
-|  | - Video generation (not available)      |       +------------------+                   |
-|  +------------------+              |                               |
-|                                    v                               |
-|  +------------------+       +------------------+                   |
-|  |   Integrations   |       |     Skills       |                   |
-|  +------------------+       +------------------+                   |
-|  | - PMS (Mews)     |  <->  | - RoomService    |                   |
-|  | - Maps API       |       | - Housekeeping   |                   |
-|  | - Viator API     |       | - LocalRecs      |                   |
-|  | - Events API     |       | - Directions     |                   |
-|  +------------------+       | - Booking        |                   |
-|                             | - MediaGen       |                   |
+|  | - 🧠 MiMo-V2    |  <->  | - room_service   |                   |
+|  | - 🎧 Whisper     |       | - housekeeping   |                   |
+|  | - 🔊 Kokoro      |       | - amenities_info |                   |
+|  +------------------+       | - wifi_info      |                   |
+|                             | - local_recs     |                   |
+|                             | - itinerary_plan |                   |
+|                             | - voice_call     |                   |
+|                             | - translate      |                   |
 |                             +------------------+                   |
 |                                                                    |
 +------------------------------------------------------------------+
@@ -445,97 +267,38 @@ async def initiate_handoff(context: ConversationContext, trigger: HandoffTrigger
 
 ---
 
-## 8. Data Flow Sequence
-
-### 8.1 Standard Request Flow
-
-```
-Guest                 Web App              Router               Agent              Backend
-  |                      |                    |                    |                   |
-  |---(1) Audio-------->|                    |                    |                   |
-  |                      |---(2) ASR-------->|                    |                   |
-  |                      |<---(3) Text-------|                    |                   |
-  |                      |---(4) Classify--->|                    |                   |
-  |                      |<---(5) Intent-----|                    |                   |
-  |                      |---(6) Execute-----|---(7) Route------->|                   |
-  |                      |                    |                    |---(8) API Call-->|
-  |                      |                    |                    |<---(9) Result----|
-  |                      |                    |<---(10) Response---|                   |
-  |                      |<---(11) TTS-------|                    |                   |
-  |<---(12) Audio--------|                    |                    |                   |
-```
-
----
-
-## 9. Security Considerations
-
-### 9.1 Authentication
-
-- Session tokens for guest identification
-- API keys for service-to-service communication
-- JWT tokens with short expiry for sensitive operations
-
-### 9.2 Data Protection
-
-- Audio data retained for 24 hours maximum
-- PII anonymized in logs
-- Encryption at rest (AES-256) and in transit (TLS 1.3)
-
-### 9.3 Rate Limiting
-
-```python
-RATE_LIMITS = {
-    "requests_per_minute": 30,
-    "audio_uploads_per_minute": 10,
-    "media_generations_per_hour": 5,
-}
-```
-
----
-
-## 10. Appendix
-
-### A. Skill ID Reference
-
-| ID | Name | Category |
-|----|------|----------|
-| CON-001 | Room Service | concierge |
-| CON-002 | Housekeeping | concierge |
-| CON-003 | Amenities Info | concierge |
-| CON-004 | WiFi Help | concierge |
-| CON-005 | Check-out | concierge |
-| CON-006 | Complaints | concierge |
-| CON-007 | Wake-up Call | concierge |
-| CON-008 | Billing | concierge |
-| SEE-001 | Local Recommendations | sightseeing |
-| SEE-002 | Itinerary Planning | sightseeing |
-| SEE-003 | Directions | sightseeing |
-| SEE-004 | Events | sightseeing |
-| SEE-005 | Booking | sightseeing |
-| SEE-006 | Translation | sightseeing |
-| SEE-007 | Destination Preview | sightseeing |
-| SEE-008 | Video Tour | sightseeing |
-| SYS-001 | Language Switch | system |
-| SYS-002 | Human Handoff | system |
-| SYS-003 | Repeat | system |
-| SYS-004 | Slow Down | system |
-| SYS-005 | Conversation Reset | system |
-| MED-001 | Image Generation | media |
-| MED-002 | Video Generation | media |
-
-### B. Technology Stack
+## 9. Technology Stack
 
 | Component | Technology |
 |-----------|------------|
 | Language | Python 3.11+ |
-| Web Framework | FastAPI |
-| Async Runtime | asyncio / uvloop |
-| State Store | Redis |
-| Database | PostgreSQL |
+| Web Framework | Flask |
 | AI Platform | Chutes.ai (REST API) |
-| Deployment | Vercel (serverless) |
+| Brain LLM | MiMo-V2-Flash |
+| STT | Whisper Large V3 |
+| TTS | Kokoro |
+| Deployment | Vercel (serverless, `@vercel/python`) |
+| Frontend | Vanilla HTML/CSS/JS |
+
+---
+
+## 10. Extensibility
+
+### Adding a New Tool
+
+1. Define JSON schema in `TOOLS` array (OpenAI function-calling format)
+2. Implement `_execute_<tool_name>(args)` handler
+3. Add case to `_execute_tool()` dispatch
+4. Brain LLM automatically discovers and uses the new tool
+
+### Future Extensions
+
+- **Real telephony**: Replace mock `voice_call` with Twilio/VAPI
+- **PMS integration**: Add `check_reservation`, `post_charge` tools
+- **External APIs**: Add `book_restaurant`, `get_directions` tools
+- **Multi-modal**: Add image/video generation tools when available
 
 ---
 
 **Document Owner:** NomadAI Engineering Team
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-11
