@@ -229,7 +229,7 @@ class VoicePipelineDemo:
                 timeout=self.config.timeout
             )
 
-            # Note: This will fail if ZhipuAI API key is not valid
+            # Note: Transcribe is a 501 stub (ASR not available via Chutes)
             # But we're testing the endpoint structure
             data = response.json()
 
@@ -240,7 +240,7 @@ class VoicePipelineDemo:
             elif response.status_code == 500:
                 # Expected if API key is invalid or service unavailable
                 print("(Transcription endpoint available but API key validation failed)")
-                print("This is expected if ZHIPUAI_API_KEY is not configured")
+                print("This is expected — transcription requires an ASR provider (not available)")
                 self.results.append(('transcribe', 'partial', 'API validation required'))
                 return True
             else:
@@ -250,7 +250,7 @@ class VoicePipelineDemo:
 
         except Exception as e:
             print(f"Note: {str(e)}")
-            print("(Transcription endpoint requires valid ZHIPUAI_API_KEY)")
+            print("(Transcription endpoint not available — ASR provider not configured)")
             self.results.append(('transcribe', 'partial', str(e)))
             return True
 

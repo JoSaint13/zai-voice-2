@@ -116,7 +116,6 @@ pytest --cov=api --cov=tests --cov-report=html
 ### test_api.py Fixtures
 - `app` - Flask test app instance
 - `client` - Flask test client
-- `mock_zhipu_client` - Mocked ZhipuAI client
 
 ### test_skills.py Fixtures
 - `skill_router` - IntentRouter instance
@@ -128,7 +127,7 @@ pytest --cov=api --cov=tests --cov-report=html
 
 ### API Tests
 All external API calls are mocked using `unittest.mock`:
-- ZhipuAI client methods are patched
+- Chutes.ai HTTP requests are patched via `requests.post`
 - Flask requests are handled by test client
 - No actual API calls are made (safe for offline testing)
 
@@ -142,7 +141,7 @@ Skills are implemented as test fixtures:
 
 All tests should pass when:
 1. Flask app is properly configured
-2. ZhipuAI imports are available (mocked in tests)
+2. `CHUTES_API_KEY` env var is set (mocked in test fixtures)
 3. All dependencies are installed
 
 ### Typical Output
@@ -159,14 +158,9 @@ tests/test_skills.py::TestSkillBaseInterface::test_skill_initialization PASSED
 
 ## Troubleshooting
 
-### Import Errors
-If you get `ModuleNotFoundError: No module named 'zhipuai'`:
-- This is expected - the tests mock the ZhipuAI client
-- The mocking happens before import, so tests still work
-
 ### Flask App Issues
 If Flask tests fail to initialize:
-- Ensure `ZHIPUAI_API_KEY` environment variable is set
+- Ensure `CHUTES_API_KEY` environment variable is set
 - The test fixtures mock this automatically
 
 ### Assertion Failures

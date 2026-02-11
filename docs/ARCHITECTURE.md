@@ -8,7 +8,7 @@
 
 ## 1. System Overview
 
-NomadAI Voice Agent is a voice-first digital concierge system built on Z.AI's GLM model stack. This document describes the architecture for intent routing, skill management, agent communication, state management, and error handling.
+NomadAI Voice Agent is a voice-first digital concierge system built on Chutes.ai model stack. This document describes the architecture for intent routing, skill management, agent communication, state management, and error handling.
 
 ### Core Design Principles
 
@@ -44,7 +44,7 @@ The Intent Router is the central dispatcher that classifies user intents and rou
                              v
                     +------------------+
                     |  Intent Router   |
-                    |   (GLM-4.7)      |
+                    |   (Chutes LLM)      |
                     +--------+---------+
                              |
               +--------------+--------------+
@@ -88,7 +88,7 @@ Respond in JSON format:
 
 ```
 1. Receive transcribed text + conversation context
-2. Call GLM-4.7 with classification prompt
+2. Call Chutes LLM with classification prompt
 3. Parse JSON response
 4. If confidence < 0.6:
    - Ask clarifying question
@@ -189,8 +189,8 @@ for module in [concierge, sightseeing, media, system]:
 ```
 +--------+    +-------+    +--------+    +-------+    +--------+
 | Client | -> | ASR   | -> | Router | -> | Agent | -> | TTS    |
-| (Web/  |    | GLM-  |    | Intent |    | Skill |    | GLM-4  |
-| App)   |    | ASR   |    | Class. |    | Exec  |    | Voice  |
+| (Web/  |    | (TBD) |    | Intent |    | Skill |    | (TBD)  |
+| App)   |    |       |    | Class. |    | Exec  |    |        |
 +--------+    +-------+    +--------+    +-------+    +--------+
     ^                                                      |
     |                                                      |
@@ -373,7 +373,7 @@ async def with_retry(func, config: RetryConfig):
 Level 1: Primary Service Unavailable
   -> Use cached responses for common queries
 
-Level 2: GLM-4.7 Unavailable
+Level 2: Chutes LLM Unavailable
   -> Fallback to pattern matching for basic intents
   -> Escalate complex queries to human
 
@@ -422,11 +422,11 @@ async def initiate_handoff(context: ConversationContext, trigger: HandoffTrigger
 |  +------------------+       +------------------+                   |
 |  |    AI Services   |       |     Agents       |                   |
 |  +------------------+       +------------------+                   |
-|  | - GLM-ASR-2512   |  <->  | - ConciergeAgent |                   |
-|  | - GLM-4.7        |       | - SightseeingAgt |                   |
-|  | - GLM-4-Voice    |       | - MediaAgent     |                   |
-|  | - CogView-4      |       | - SystemAgent    |                   |
-|  | - CogVideoX      |       +------------------+                   |
+|  | - ASR (not configured)   |  <->  | - ConciergeAgent |                   |
+|  | - Chutes LLM        |       | - SightseeingAgt |                   |
+|  | - TTS (not configured)    |       | - MediaAgent     |                   |
+|  | - Image generation (not available)      |       | - SystemAgent    |                   |
+|  | - Video generation (not available)      |       +------------------+                   |
 |  +------------------+              |                               |
 |                                    v                               |
 |  +------------------+       +------------------+                   |
@@ -532,7 +532,7 @@ RATE_LIMITS = {
 | Async Runtime | asyncio / uvloop |
 | State Store | Redis |
 | Database | PostgreSQL |
-| AI Platform | Z.AI (zhipuai SDK) |
+| AI Platform | Chutes.ai (REST API) |
 | Deployment | Vercel (serverless) |
 
 ---

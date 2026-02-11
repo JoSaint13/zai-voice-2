@@ -1,5 +1,10 @@
 # CLAUDE.md - Project Context for Claude Code
 
+## MANDATORY: Use td for Task Management
+
+You must run td usage --new-session at conversation start (or after /clear) to see current work.
+Use td usage -q for subsequent reads.
+
 > This file provides context for Claude when working on the NomadAI Voice Agent project.
 
 ---
@@ -15,21 +20,21 @@
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| Speech-to-Text | GLM-ASR-2512 | 20+ languages, dialect support |
-| Conversation | GLM-4.7 | Intent handling, RAG, reasoning |
-| Text-to-Speech | Browser TTS / GLM-4-Voice | Voice output |
-| Image Generation | CogView-4 | Destination previews |
-| Video Generation | CogVideoX | Tour videos |
+| Speech-to-Text | *Unavailable* | Requires Chutes.ai ASR (removed) |
+| Conversation | DeepSeek V3 (via Chutes) | Intent handling, reasoning |
+| Text-to-Speech | Browser TTS | Voice output |
+| Image Generation | *Text fallback* | Image generation (not available) unavailable |
+| Video Generation | *Text fallback* | Video generation (not available) unavailable |
 | Backend | Flask (Python 3.11+) | API server |
 | Frontend | Vanilla HTML/CSS/JS | Mobile-first web UI |
 | Deployment | Vercel | Serverless hosting |
 
 ### API Provider
 
-All AI models are from **Z.AI** (ZhipuAI):
-- API Base: `https://open.z.ai/api/paas/v4/`
-- SDK: `zhipuai` Python package
-- Auth: `ZHIPUAI_API_KEY` environment variable
+All AI models are served via **Chutes.ai** (decentralized inference on Bittensor):
+- Per-model slug URLs: `https://{slug}.chutes.ai/v1/chat/completions`
+- Auth: `CHUTES_API_KEY` environment variable (Bearer token)
+- 11 models available: DeepSeek V3/V3.1/V3.2/R1, Qwen3-32B/235B, Chutes LLM/4.6, Hermes 4 70B, Mistral Small 3.1, GPT-OSS 120B
 
 ---
 
@@ -46,6 +51,7 @@ zai-voice-2/
 │   └── skills/               # Skill implementations
 │       ├── __init__.py
 │       ├── base.py           # BaseSkill, SkillRegistry, Context
+│       ├── chat_provider.py  # Shared Chutes.ai chat function
 │       ├── concierge.py      # Hotel service skills
 │       ├── sightseeing.py    # Local exploration skills
 │       └── media.py          # Image/video generation
@@ -80,9 +86,13 @@ zai-voice-2/
 ### 1. API Server (`api/index.py`)
 
 Main Flask application with endpoints:
-- `POST /api/transcribe` - Audio → Text (GLM-ASR)
-- `POST /api/chat` - Text → Response (GLM-4.7)
-- `POST /api/voice-chat` - Audio → Response (combined)
+- `POST /api/chat` - Text → Response (via Chutes.ai)
+- `POST /api/translate` - Translation (prompt-based via Chutes.ai)
+- `POST /api/transcribe` - *501 stub* (requires Chutes.ai ASR)
+- `POST /api/voice-chat` - *501 stub* (requires Chutes.ai ASR)
+- `POST /api/generate-slides` - *501 stub* (requires Chutes.ai agent)
+- `POST /api/generate-video` - *501 stub* (requires Chutes.ai agent)
+- `GET /api/providers` - List available models
 - `POST /api/reset` - Clear session
 
 Session state is stored in-memory (note: won't persist across Vercel cold starts).
@@ -112,11 +122,11 @@ Mobile-first design optimized for Samsung Galaxy S21 FE:
 pip install -r requirements.txt
 
 # Set API key
-export ZHIPUAI_API_KEY='your_key_here'
+export CHUTES_API_KEY='cpk_your_key_here'
 
 # Run locally
 python api/index.py
-# Opens at http://localhost:3000
+# Opens at http://localhost:8088
 
 # Run tests
 pytest tests/ -v
@@ -174,33 +184,22 @@ class MySkill(BaseSkill):
 
 3. Add tests in `tests/test_skills.py`
 
-### Calling Z.AI APIs
+### Calling Chutes.ai APIs
 
 ```python
-from zhipuai import ZhipuAI
-import os
+from src.skills.chat_provider import skill_chat
 
-client = ZhipuAI(api_key=os.getenv('ZHIPUAI_API_KEY'))
-
-# Chat
-response = client.chat.completions.create(
-    model='glm-4.7',
-    messages=[{'role': 'user', 'content': 'Hello'}]
-)
-
-# Transcribe
-with open('audio.wav', 'rb') as f:
-    result = client.audio.transcriptions.create(
-        model='glm-asr-2512',
-        file=f
-    )
-
-# Image generation
-result = client.images.generations.create(
-    model='cogview-4',
-    prompt='Beautiful sunset'
-)
+# Chat (used by all skills)
+messages = [
+    {"role": "system", "content": "You are a hotel concierge."},
+    {"role": "user", "content": "What time is breakfast?"}
+]
+result = skill_chat(messages)
 ```
+
+> Note: Image generation (Image generation (not available)), video generation (Video generation (not available)),
+> and speech-to-text (ASR) are not available via Chutes.ai.
+> These skills provide text descriptions as fallback.
 
 ### Modifying the UI
 
@@ -216,7 +215,7 @@ The UI is in `public/index.html`. Key sections:
 ### Version: 0.1.0 (MVP)
 
 ### Completed (Phase 1)
-- [x] Voice pipeline (GLM-ASR → GLM-4.7)
+- [x] Voice pipeline (ASR → Chutes LLM)
 - [x] Web UI with hold-to-speak
 - [x] Vercel deployment
 - [x] Skill system architecture
@@ -233,8 +232,8 @@ The UI is in `public/index.html`. Key sections:
 ### Planned
 - [ ] PMS integration (Mews, Cloudbeds)
 - [ ] WhatsApp/SMS channels
-- [ ] CogView-4 image generation
-- [ ] CogVideoX video generation
+- [ ] Image generation (not available) image generation
+- [ ] Video generation (not available) video generation
 
 ---
 
@@ -262,7 +261,7 @@ Runner: Create tests for [feature] and validate
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ZHIPUAI_API_KEY` | Yes | Z.AI API authentication |
+| `CHUTES_API_KEY` | Yes | Chutes.ai API authentication |
 | `FLASK_ENV` | No | `development` or `production` |
 | `LOG_LEVEL` | No | `DEBUG`, `INFO`, `WARNING` |
 
@@ -295,7 +294,7 @@ python scripts/demo.py --api-url http://localhost:3000
 vercel --prod
 
 # Set environment variable
-vercel env add ZHIPUAI_API_KEY
+vercel env add CHUTES_API_KEY
 
 # View logs
 vercel logs
@@ -307,7 +306,7 @@ vercel logs
 # Run Flask dev server
 python api/index.py
 
-# Access at http://localhost:3000
+# Access at http://localhost:8088
 ```
 
 ---
@@ -316,9 +315,9 @@ python api/index.py
 
 | Issue | Solution |
 |-------|----------|
-| `ZHIPUAI_API_KEY not set` | `export ZHIPUAI_API_KEY='...'` |
+| `CHUTES_API_KEY not set` | `export CHUTES_API_KEY='cpk_...'` |
 | Microphone not working | Check browser permissions |
-| Slow responses | Check Z.AI API latency |
+| Slow responses | Check Chutes.ai API latency |
 | Skill not triggering | Verify `can_handle()` logic |
 | Vercel timeout | Keep functions under 10s |
 
@@ -326,10 +325,7 @@ python api/index.py
 
 ## Links
 
-- **Z.AI Docs**: https://docs.z.ai
-- **GLM-ASR**: https://docs.z.ai/guides/audio/glm-asr-2512
-- **GLM-4.7**: https://docs.z.ai/api/glm-4
-- **CogView-4**: https://docs.z.ai/api/cogview
+- **Chutes.ai**: https://chutes.ai
 - **Vercel Docs**: https://vercel.com/docs
 
 ---
@@ -342,7 +338,7 @@ python api/index.py
 4. **Use the skill system** in `src/skills/` for new features
 5. **Test changes** with `pytest` and `scripts/demo.py`
 6. **Mobile-first** - test UI on Galaxy S21 FE viewport (360x800)
-7. **Z.AI models only** - don't suggest OpenAI/Anthropic alternatives
+7. **Chutes.ai models only** - all inference goes through Chutes.ai provider
 8. **Commit often** with descriptive messages
 9. **Update docs** when adding features
 

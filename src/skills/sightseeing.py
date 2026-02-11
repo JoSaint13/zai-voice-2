@@ -1,11 +1,12 @@
 """
 Sightseeing Expert Skills
 Handles local recommendations, itinerary planning, and directions.
+Uses Chutes.ai via shared chat_provider.
 """
 
 import os
 from typing import Dict, Any, List
-from zhipuai import ZhipuAI
+from src.skills.chat_provider import skill_chat
 
 
 class RecommendationSkill:
@@ -22,26 +23,13 @@ class RecommendationSkill:
     ]
 
     def __init__(self):
-        api_key = os.getenv("ZHIPUAI_API_KEY")
-        if not api_key:
-            raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-        self.client = ZhipuAI(api_key=api_key)
+        pass
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Provide local recommendations.
-
-        Args:
-            context: Contains 'transcription', 'session_id', 'location', etc.
-
-        Returns:
-            Dict with 'response', 'action', and 'metadata'
-        """
         transcription = context.get("transcription", "")
         session_id = context.get("session_id", "default")
         location = context.get("location", "the area")
 
-        # In production, this would use RAG with local knowledge base
         local_kb = """
         Popular Local Spots:
         - Ramen: Ichiran (5 min walk), Ippudo (10 min walk)
@@ -65,18 +53,10 @@ class RecommendationSkill:
                 Consider: cuisine type, distance, price range, current time,
                 and whether places are currently open."""
             },
-            {
-                "role": "user",
-                "content": transcription
-            }
+            {"role": "user", "content": transcription}
         ]
 
-        response = self.client.chat.completions.create(
-            model="glm-4.7",
-            messages=messages
-        )
-
-        assistant_message = response.choices[0].message.content
+        assistant_message = skill_chat(messages)
 
         return {
             "response": assistant_message,
@@ -104,31 +84,18 @@ class ItinerarySkill:
     ]
 
     def __init__(self):
-        api_key = os.getenv("ZHIPUAI_API_KEY")
-        if not api_key:
-            raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-        self.client = ZhipuAI(api_key=api_key)
+        pass
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create personalized itinerary.
-
-        Args:
-            context: Contains 'transcription', 'session_id', 'preferences', etc.
-
-        Returns:
-            Dict with 'response', 'action', and 'metadata'
-        """
         transcription = context.get("transcription", "")
         session_id = context.get("session_id", "default")
 
-        # In production, use RAG + route optimization
         itinerary_kb = """
         Popular Routes:
-        4-hour cultural tour: Temple (1h) → Museum (1.5h) → Local lunch (1h) → Market (30min)
-        Half-day food tour: Breakfast spot → Coffee → Market tour → Lunch
-        Walking tour: Park → Historic district → Shopping street → Cafe
-        Family-friendly: Aquarium (2h) → Park (1h) → Kids restaurant
+        4-hour cultural tour: Temple (1h) -> Museum (1.5h) -> Local lunch (1h) -> Market (30min)
+        Half-day food tour: Breakfast spot -> Coffee -> Market tour -> Lunch
+        Walking tour: Park -> Historic district -> Shopping street -> Cafe
+        Family-friendly: Aquarium (2h) -> Park (1h) -> Kids restaurant
         """
 
         messages = [
@@ -144,18 +111,10 @@ class ItinerarySkill:
                 Consider: available time, interests, walking distance,
                 meal times, and opening hours. Present as a bulleted list."""
             },
-            {
-                "role": "user",
-                "content": transcription
-            }
+            {"role": "user", "content": transcription}
         ]
 
-        response = self.client.chat.completions.create(
-            model="glm-4.7",
-            messages=messages
-        )
-
-        assistant_message = response.choices[0].message.content
+        assistant_message = skill_chat(messages)
 
         return {
             "response": assistant_message,
@@ -182,26 +141,13 @@ class DirectionsSkill:
     ]
 
     def __init__(self):
-        api_key = os.getenv("ZHIPUAI_API_KEY")
-        if not api_key:
-            raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-        self.client = ZhipuAI(api_key=api_key)
+        pass
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Provide directions to destination.
-
-        Args:
-            context: Contains 'transcription', 'session_id', 'current_location', etc.
-
-        Returns:
-            Dict with 'response', 'action', and 'metadata'
-        """
         transcription = context.get("transcription", "")
         session_id = context.get("session_id", "default")
         hotel_location = context.get("hotel_location", "the hotel")
 
-        # In production, integrate with OpenStreetMap API
         directions_kb = """
         Common Destinations from Hotel:
         - Shibuya Station: 10 min walk east, or 5 min subway
@@ -223,18 +169,10 @@ class DirectionsSkill:
                 Include: walking time, transportation options, landmarks,
                 and distance. Prefer walking for <15 min distances."""
             },
-            {
-                "role": "user",
-                "content": transcription
-            }
+            {"role": "user", "content": transcription}
         ]
 
-        response = self.client.chat.completions.create(
-            model="glm-4.7",
-            messages=messages
-        )
-
-        assistant_message = response.choices[0].message.content
+        assistant_message = skill_chat(messages)
 
         return {
             "response": assistant_message,

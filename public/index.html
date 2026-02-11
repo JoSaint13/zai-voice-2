@@ -6,772 +6,979 @@
     <meta name="theme-color" content="#1a1a2e">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>NomadAI - Voice Assistant</title>
+    <title>NomadAI — Multi-Provider Hotel Concierge Showroom</title>
     <style>
         :root {
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
-            --safe-left: env(safe-area-inset-left, 0px);
-            --safe-right: env(safe-area-inset-right, 0px);
             --primary: #00d4ff;
             --primary-dark: #0077b6;
             --accent: #7b2cbf;
             --accent-dark: #5a189a;
             --danger: #ff4757;
+            --success: #4caf50;
             --bg-dark: #1a1a2e;
             --bg-darker: #16213e;
+            --bg-card: rgba(255,255,255,0.04);
+            --border: rgba(255,255,255,0.08);
+            --radius: 14px;
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        html, body {
-            height: 100%;
-            overflow: hidden;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html { height: 100%; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
             color: #fff;
-            display: flex;
-            flex-direction: column;
+            min-height: 100%;
         }
 
+        /* ── Layout ── */
         .app {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            padding-top: var(--safe-top);
-            padding-bottom: var(--safe-bottom);
-            padding-left: var(--safe-left);
-            padding-right: var(--safe-right);
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 16px 16px calc(var(--safe-bottom) + 16px);
+            padding-top: calc(var(--safe-top) + 16px);
         }
 
-        /* Header - Optimized for mobile */
-        header {
-            text-align: center;
-            padding: 16px 16px 12px;
-            flex-shrink: 0;
-        }
-
-        .logo-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
+        /* ── Header ── */
+        header { text-align: center; padding: 20px 0 12px; }
+        .logo-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
         h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
+            font-size: 2rem; font-weight: 800;
             background: linear-gradient(90deg, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
+        .badge { font-size: .65rem; background: rgba(255,255,255,.1); padding: 2px 8px; border-radius: 8px; color: #888; }
+        .tagline { color: #888; font-size: .85rem; margin-top: 4px; }
+        .hotel-name { color: var(--primary); font-size: .95rem; font-weight: 600; margin-top: 6px; }
 
-        .version-badge {
-            font-size: 0.65rem;
-            background: rgba(255,255,255,0.1);
-            padding: 2px 6px;
-            border-radius: 8px;
-            color: #888;
+        /* ── Capability Badges ── */
+        .cap-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; justify-content: center; }
+        .cap {
+            display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+            background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 20px;
+            font-size: .78rem; color: #aaa;
         }
+        .cap .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot.green { background: var(--success); }
+        .dot.blue { background: var(--primary); }
+        .dot.purple { background: var(--accent); }
 
-        .subtitle {
-            color: #888;
-            font-size: 0.8rem;
-            margin-top: 4px;
+        /* ── Tabs ── */
+        .tabs {
+            display: flex; gap: 4px; overflow-x: auto; padding: 14px 0 10px;
+            -webkit-overflow-scrolling: touch; scrollbar-width: none;
         }
-
-        /* Chat Container - Flexible height */
-        .chat-container {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.03);
-            margin: 0 12px;
-            border-radius: 20px;
-            padding: 16px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            scroll-behavior: smooth;
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab {
+            flex-shrink: 0; padding: 8px 18px; border-radius: 20px; font-size: .85rem; font-weight: 600;
+            border: 1px solid var(--border); background: transparent; color: #888; cursor: pointer;
+            transition: all .2s; white-space: nowrap;
         }
+        .tab:hover { border-color: rgba(255,255,255,.2); color: #bbb; }
+        .tab.active { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; border-color: transparent; }
 
-        .message {
-            margin-bottom: 12px;
-            padding: 12px 14px;
-            border-radius: 16px;
-            max-width: 85%;
-            animation: fadeIn 0.25s ease;
-            font-size: 0.95rem;
-            line-height: 1.4;
+        /* ── Panels ── */
+        .panel { display: none; }
+        .panel.active { display: block; animation: fadeIn .25s ease; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+        /* ── Chat Panel ── */
+        .chat-box {
+            background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border);
+            height: 50vh; min-height: 280px; max-height: 500px;
+            display: flex; flex-direction: column; overflow: hidden;
         }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
+        .chat-messages {
+            flex: 1; padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch;
         }
+        .msg { margin-bottom: 12px; padding: 12px 14px; border-radius: 16px; max-width: 85%; font-size: .95rem; line-height: 1.45; animation: fadeIn .25s ease; }
+        .msg.user { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); margin-left: auto; border-bottom-right-radius: 4px; }
+        .msg.assistant { background: rgba(255,255,255,.08); border-bottom-left-radius: 4px; }
+        .msg .lbl { font-size: .7rem; color: rgba(255,255,255,.45); margin-bottom: 3px; font-weight: 500; }
 
-        .message.user {
+        .chat-controls { padding: 10px 12px; border-top: 1px solid var(--border); }
+        .chat-row { display: flex; gap: 8px; }
+        .chat-input {
+            flex: 1; min-height: 46px; padding: 0 14px; border: none; border-radius: 12px;
+            background: rgba(255,255,255,.08); color: #fff; font-size: 1rem;
+        }
+        .chat-input::placeholder { color: #555; }
+        .chat-input:focus { outline: none; background: rgba(255,255,255,.12); }
+        .btn-send {
+            min-width: 60px; min-height: 46px; padding: 0 18px;
             background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-            margin-left: auto;
-            border-bottom-right-radius: 4px;
+            border: none; border-radius: 12px; color: #fff; font-size: .95rem; font-weight: 600; cursor: pointer;
         }
+        .btn-send:active { transform: scale(.96); }
 
-        .message.assistant {
-            background: rgba(255, 255, 255, 0.08);
-            border-bottom-left-radius: 4px;
+        /* Voice bar */
+        .voice-bar { margin-top: 8px; }
+        .btn-mic {
+            width: 100%; min-height: 56px; font-size: .95rem; font-weight: 600; border: none; border-radius: 14px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+            touch-action: manipulation; transition: all .2s;
         }
+        .btn-mic.idle { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
+        .btn-mic.recording { background: linear-gradient(135deg, var(--danger), #c0392b); color: #fff; animation: pulse .8s infinite; }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.02)} }
+        .mic-icon { width: 24px; height: 24px; }
 
-        .message.system {
-            background: rgba(255, 153, 0, 0.15);
-            border: 1px solid rgba(255, 153, 0, 0.3);
-            max-width: 100%;
+        .chat-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; gap: 8px; }
+        .btn-sm {
+            min-height: 36px; padding: 0 14px; border-radius: 10px; font-size: .8rem; cursor: pointer;
+            border: 1px solid #444; background: transparent; color: #888;
         }
+        .btn-sm:active { border-color: var(--primary); color: var(--primary); }
+        .status-text { flex: 1; text-align: right; color: #555; font-size: .8rem; }
+        .status-text.error { color: var(--danger); }
 
-        .message .label {
-            font-size: 0.7rem;
-            color: rgba(255,255,255,0.5);
-            margin-bottom: 4px;
-            font-weight: 500;
+        /* ── Tool Panels ── */
+        .tool-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
         }
-
-        /* Controls - Fixed at bottom, thumb-friendly */
-        .controls-wrapper {
-            flex-shrink: 0;
-            padding: 12px;
-            background: linear-gradient(to top, var(--bg-darker) 0%, transparent 100%);
+        .tool-card h3 { font-size: 1.05rem; margin-bottom: 4px; }
+        .tool-card .desc { font-size: .82rem; color: #888; margin-bottom: 16px; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; margin-bottom: 5px; color: #aaa; font-size: .85rem; }
+        .field input, .field textarea, .field select {
+            width: 100%; padding: 11px 14px; background: rgba(255,255,255,.07); border: 1px solid var(--border);
+            border-radius: 10px; color: #fff; font-size: .95rem;
         }
+        .field textarea { min-height: 90px; resize: vertical; font-family: inherit; }
+        .field input::placeholder, .field textarea::placeholder { color: #555; }
+        .field select option { background: #1a1a2e; color: #fff; }
+        .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-        /* Large Mic Button - Easy to tap */
-        .record-btn {
-            width: 100%;
-            min-height: 64px;
-            font-size: 1rem;
-            font-weight: 600;
-            border: none;
-            border-radius: 16px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            touch-action: manipulation;
+        .btn-action {
+            width: 100%; min-height: 48px; border: none; border-radius: 12px; font-size: .95rem; font-weight: 600;
+            cursor: pointer; color: #fff; transition: all .2s;
         }
+        .btn-action:active { transform: scale(.97); }
+        .btn-action:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-action.primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
+        .btn-action.accent { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); }
 
-        .record-btn.idle {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
-        }
-
-        .record-btn.recording {
-            background: linear-gradient(135deg, var(--danger), #c0392b);
-            color: white;
-            animation: pulse 0.8s infinite;
-            box-shadow: 0 4px 20px rgba(255, 71, 87, 0.4);
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.02); }
-        }
-
-        .record-btn:active {
-            transform: scale(0.98);
-        }
-
-        .mic-icon {
-            width: 28px;
-            height: 28px;
-        }
-
-        /* Text Input Row */
-        .text-input-container {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .text-input {
-            flex: 1;
-            min-height: 48px;
-            padding: 0 16px;
-            border: none;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.08);
-            color: white;
-            font-size: 1rem;
-        }
-
-        .text-input::placeholder {
-            color: #666;
-        }
-
-        .text-input:focus {
-            outline: none;
-            background: rgba(255, 255, 255, 0.12);
-        }
-
-        .send-btn {
-            min-width: 64px;
-            min-height: 48px;
-            padding: 0 20px;
-            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-            border: none;
-            border-radius: 12px;
-            color: white;
-            font-size: 0.95rem;
-            font-weight: 600;
-            cursor: pointer;
-            touch-action: manipulation;
-        }
-
-        .send-btn:active {
-            transform: scale(0.96);
-        }
-
-        /* Reset & Status */
-        .footer-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 10px;
-            gap: 12px;
-        }
-
-        .reset-btn {
-            min-height: 40px;
-            padding: 0 16px;
-            background: transparent;
-            border: 1px solid #444;
-            color: #888;
-            font-size: 0.85rem;
-            cursor: pointer;
-            touch-action: manipulation;
-        }
-
-        .reset-btn:active {
-            border-color: var(--danger);
-            color: var(--danger);
-        }
-
-        /* Form Elements */
-        .input-group {
-            margin-bottom: 18px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #aaa;
-            font-size: 0.9rem;
-        }
-
-        input, textarea, select {
-            width: 100%;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            color: white;
-            font-size: 1rem;
-        }
-
-        textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        input::placeholder, textarea::placeholder {
-            color: #666;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-
-        /* Result Box */
         .result-box {
-            margin-top: 20px;
-            padding: 18px;
-            background: rgba(0, 212, 255, 0.1);
-            border: 1px solid rgba(0, 212, 255, 0.3);
-            border-radius: 10px;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow-y: auto;
+            margin-top: 16px; padding: 16px; background: rgba(0,212,255,.08); border: 1px solid rgba(0,212,255,.2);
+            border-radius: 10px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; font-size: .9rem; line-height: 1.5;
         }
+        .result-box.hidden { display: none; }
+        .result-box.error { border-color: rgba(255,71,87,.3); background: rgba(255,71,87,.08); color: #ff8a8a; }
 
-        .result-box.hidden {
-            display: none;
+        /* ── Diagnostics ── */
+        .diag-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+        .diag-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .diag-table th { text-align: left; padding: 8px 6px; color: #888; font-size: .8rem; border-bottom: 1px solid var(--border); }
+        .diag-table td { padding: 8px 6px; font-size: .85rem; border-bottom: 1px solid rgba(255,255,255,.03); }
+
+        /* ── Responsive ── */
+        @media (max-width: 600px) {
+            h1 { font-size: 1.6rem; }
+            .chat-box { height: 45vh; }
+            .grid2 { grid-template-columns: 1fr; }
         }
-
-        /* Status */
-        .status {
-            flex: 1;
-            text-align: right;
-            color: #666;
-            font-size: 0.8rem;
-        }
-
-        .status.error {
-            color: var(--danger);
-        }
-
-        /* Recording indicator */
-        .recording-indicator {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 8px 0;
-        }
-
-        .recording-indicator.active {
-            display: flex;
-        }
-
-        .recording-dot {
-            width: 10px;
-            height: 10px;
-            background: var(--danger);
-            border-radius: 50%;
-            animation: blink 0.8s infinite;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-
-        .recording-text {
-            color: var(--danger);
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-
-        /* Landscape mode adjustments */
-        @media (orientation: landscape) and (max-height: 500px) {
-            header {
-                padding: 8px 16px;
-            }
-            h1 {
-                font-size: 1.3rem;
-            }
-            .subtitle {
-                display: none;
-            }
-            .chat-container {
-                margin: 0 8px;
-                padding: 10px;
-            }
-            .message {
-                padding: 8px 12px;
-                font-size: 0.9rem;
-            }
-            .controls-wrapper {
-                padding: 8px;
-            }
-            .record-btn {
-                min-height: 50px;
-            }
-        }
-
-        /* Galaxy S21 FE specific (1080x2340) */
-        @media (min-width: 360px) and (max-width: 420px) {
-            .chat-container {
-                margin: 0 10px;
-            }
-            .record-btn {
-                min-height: 68px;
-            }
-            .message {
-                max-width: 88%;
-            }
-        }
-
-        /* Larger phones */
-        @media (min-width: 420px) {
-            .app {
-                max-width: 480px;
-                margin: 0 auto;
-            }
-        }
-
-        /* Desktop */
         @media (min-width: 768px) {
-            .app {
-                max-width: 600px;
-                padding: 20px;
-            }
-            header {
-                padding: 24px;
-            }
-            h1 {
-                font-size: 2.2rem;
-            }
-            .record-btn {
-                min-height: 72px;
-            }
+            .app { padding: 24px; }
+            h1 { font-size: 2.2rem; }
         }
+
+        /* ── Provider Selector ── */
+        .provider-bar {
+            display: flex; gap: 8px; align-items: center; justify-content: center;
+            flex-wrap: wrap; margin: 10px 0 6px; padding: 10px 14px;
+            background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 12px;
+        }
+        .provider-bar label { font-size: .8rem; color: #888; font-weight: 500; }
+        .provider-bar select {
+            padding: 6px 10px; background: rgba(255,255,255,.08); border: 1px solid var(--border);
+            border-radius: 8px; color: #fff; font-size: .82rem; max-width: 240px;
+        }
+        .provider-bar select option { background: #1a1a2e; color: #fff; }
+        .provider-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 10px; border-radius: 12px; font-size: .72rem; font-weight: 600;
+        }
+        .provider-badge.chutes { background: rgba(123,44,191,.15); color: var(--accent); }
     </style>
 </head>
 <body>
-    <div class="app">
-        <header>
-            <div class="logo-container">
-                <h1>NomadAI</h1>
-                <span class="version-badge">v0.1.0</span>
-            </div>
-            <p class="subtitle">Voice-first hotel assistant</p>
-        </header>
+<div class="app">
+    <!-- Header -->
+    <header>
+        <div class="logo-row">
+            <h1>NomadAI</h1>
+            <span class="badge">v0.2.0</span>
+        </div>
+        <p class="tagline">AI Hotel Concierge — Powered by Chutes.ai</p>
+        <p class="hotel-name" id="hotelName">Loading...</p>
 
-        <div class="chat-container" id="chatContainer">
-            <div class="message assistant">
-                <div class="label">NomadAI</div>
-                <div>Hello! I'm your hotel assistant. Hold the mic button to speak, or type below.</div>
-            </div>
+        <!-- Provider & Model selector -->
+        <div class="provider-bar" id="providerBar">
+            <label>Provider:</label>
+            <select id="providerSelect"><option>Loading...</option></select>
+            <label>Model:</label>
+            <select id="modelSelect"><option>Loading...</option></select>
+            <span class="provider-badge" id="providerBadge">—</span>
         </div>
 
-        <div class="controls-wrapper">
-            <div class="recording-indicator" id="recordingIndicator">
-                <span class="recording-dot"></span>
-                <span class="recording-text">Listening...</span>
+        <div class="cap-grid">
+            <span class="cap"><span class="dot green"></span> Multi-Model Chat</span>
+            <span class="cap"><span class="dot blue"></span> Translation</span>
+            <span class="cap"><span class="dot green"></span> Skill Router</span>
+            <span class="cap"><span class="dot purple"></span> DeepSeek V3</span>
+            <span class="cap"><span class="dot purple"></span> Qwen3</span>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <div class="tabs" id="tabs">
+        <button class="tab active" data-panel="chat">💬 Chat</button>
+        <button class="tab" data-panel="voice">🎤 Voice</button>
+        <button class="tab" data-panel="translate">🌐 Translate</button>
+        <button class="tab" data-panel="slides">📊 Slides</button>
+        <button class="tab" data-panel="video">🎬 Video</button>
+        <button class="tab" data-panel="diag">🔧 Diagnostics</button>
+    </div>
+
+    <!-- ══ PANEL: Chat ══ -->
+    <div class="panel active" id="panel-chat">
+        <div class="chat-box">
+            <div class="chat-messages" id="chatMessages">
+                <div class="msg assistant">
+                    <div class="lbl">Concierge</div>
+                    <div>Welcome! I'm your AI hotel concierge. How can I help you today?</div>
+                </div>
             </div>
-
-            <button class="record-btn idle" id="recordBtn">
-                <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/>
-                </svg>
-                <span id="recordText">Hold to Speak</span>
-            </button>
-
-            <div class="text-input-container">
-                <input type="text" class="text-input" id="textInput" placeholder="Type a message..." enterkeyhint="send">
-                <button class="send-btn" id="sendBtn">Send</button>
-            </div>
-
-            <div class="footer-row">
-                <button class="reset-btn" id="resetBtn">Reset</button>
-                <button class="reset-btn" id="pingBtn" style="border-color:#00d4ff;color:#00d4ff;">API Test</button>
-                <div class="status" id="status">Ready</div>
-            </div>
-
-            <!-- API Test Results Modal -->
-            <div id="pingModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;padding:20px;overflow-y:auto;">
-                <div style="max-width:500px;margin:40px auto;background:#1e1e2e;border-radius:16px;padding:20px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                        <h2 style="font-size:1.1rem;color:#00d4ff;">Z.AI API Diagnostics</h2>
-                        <button onclick="document.getElementById('pingModal').style.display='none'" style="background:none;border:none;color:#888;font-size:1.5rem;cursor:pointer;">&times;</button>
-                    </div>
-                    <div id="pingResults" style="font-family:monospace;font-size:0.85rem;line-height:1.6;color:#ccc;">Running tests...</div>
+            <div class="chat-controls">
+                <div class="chat-row">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Ask about rooms, WiFi, breakfast..." enterkeyhint="send">
+                    <button class="btn-send" id="chatSendBtn">Send</button>
+                </div>
+                <div class="chat-footer">
+                    <button class="btn-sm" id="resetBtn">Reset</button>
+                    <div class="status-text" id="chatStatus">Ready</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script>
-        // API base URL - empty for same-origin (Vercel), or set for local dev
-        const API_BASE = '';
+    <!-- ══ PANEL: Voice ══ -->
+    <div class="panel" id="panel-voice">
+        <div class="chat-box">
+            <div class="chat-messages" id="voiceMessages">
+                <div class="msg assistant">
+                    <div class="lbl">Concierge</div>
+                    <div>Hold the mic button and speak — I'll transcribe and respond.</div>
+                </div>
+            </div>
+            <div class="chat-controls">
+                <div class="voice-bar">
+                    <button class="btn-mic idle" id="micBtn">
+                        <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/></svg>
+                        <span id="micText">Hold to Speak</span>
+                    </button>
+                </div>
+                <div class="chat-footer">
+                    <button class="btn-sm" id="voiceResetBtn">Reset</button>
+                    <div class="status-text" id="voiceStatus">Ready — tap &amp; hold mic</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        // Elements
-        const recordBtn = document.getElementById('recordBtn');
-        const recordText = document.getElementById('recordText');
-        const recordingIndicator = document.getElementById('recordingIndicator');
-        const chatContainer = document.getElementById('chatContainer');
-        const textInput = document.getElementById('textInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const resetBtn = document.getElementById('resetBtn');
-        const pingBtn = document.getElementById('pingBtn');
-        const pingModal = document.getElementById('pingModal');
-        const pingResults = document.getElementById('pingResults');
-        const status = document.getElementById('status');
+    <!-- ══ PANEL: Translate ══ -->
+    <div class="panel" id="panel-translate">
+        <div class="tool-card">
+            <h3>🌐 Translation Agent</h3>
+            <p class="desc">AI-powered translation via Chutes.ai — multi-language hotel communication.</p>
+            <div class="field">
+                <label>Text to translate</label>
+                <textarea id="trText" placeholder="What time is breakfast served?"></textarea>
+            </div>
+            <div class="grid2">
+                <div class="field">
+                    <label>From</label>
+                    <select id="trFrom">
+                        <option value="auto">Auto-detect</option>
+                        <option value="en">English</option>
+                        <option value="zh-CN">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>To</label>
+                    <select id="trTo">
+                        <option value="zh-CN">Chinese</option>
+                        <option value="en">English</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn-action primary" id="trBtn">Translate</button>
+            <div class="result-box hidden" id="trResult"></div>
+        </div>
+    </div>
 
-        // API Test / Ping
-        pingBtn.addEventListener('click', async () => {
-            pingModal.style.display = 'block';
-            pingResults.innerHTML = '<span style="color:#00d4ff;">Running API tests... (may take 10-20s)</span>';
-            try {
-                const r = await fetch(`${API_BASE}/api/ping`);
-                const data = await r.json();
-                let html = `<div style="margin-bottom:12px;">API Key: <span style="color:${data.api_key === 'configured' ? '#4caf50' : '#ff4757'}">${data.api_key}</span></div>`;
-                
-                // Network status
-                if (data.network) {
-                    const n = data.network;
-                    const nColor = n.status === 'ok' ? '#4caf50' : '#ff4757';
-                    html += `<div style="margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;">
-                        Network: <span style="color:${nColor}">${n.status}</span> (${n.latency_ms}ms) — ${n.base_url || ''}
-                        ${n.detail ? `<div style="color:#ff9800;font-size:0.8rem;margin-top:4px;">${n.detail}</div>` : ''}
-                    </div>`;
+    <!-- ══ PANEL: Slides ══ -->
+    <div class="panel" id="panel-slides">
+        <div class="tool-card">
+            <h3>📊 Slide / Poster Agent</h3>
+            <p class="desc">Slide generation — currently unavailable with the current provider.</p>
+            <div class="field">
+                <label>Topic</label>
+                <textarea id="slidesTopic" placeholder="Luxury hotel grand opening presentation with amenities showcase"></textarea>
+            </div>
+            <div class="grid2">
+                <div class="field">
+                    <label>Number of slides</label>
+                    <input type="number" id="slidesNum" value="8" min="3" max="20">
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end;">
+                    <button class="btn-action accent" id="slidesBtn" style="width:100%">Generate Slides</button>
+                </div>
+            </div>
+            <div class="result-box hidden" id="slidesResult"></div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: Video ══ -->
+    <div class="panel" id="panel-video">
+        <div class="tool-card">
+            <h3>🎬 Video Effects Agent</h3>
+            <p class="desc">Video generation — currently unavailable with the current provider.</p>
+            <div class="field">
+                <label>Upload hotel photo</label>
+                <input type="file" id="videoFile" accept="image/*" style="padding:10px;">
+            </div>
+            <div class="field">
+                <label>Template</label>
+                <select id="videoTemplate">
+                    <option value="french_kiss">French Kiss</option>
+                    <option value="zoom_in">Zoom In</option>
+                    <option value="pan_right">Pan Right</option>
+                    <option value="cinematic">Cinematic</option>
+                </select>
+            </div>
+            <button class="btn-action accent" id="videoBtn">Generate Video</button>
+            <div class="result-box hidden" id="videoResult"></div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: Diagnostics ══ -->
+    <div class="panel" id="panel-diag">
+        <div class="diag-card">
+            <h3>🔧 Multi-Provider API Diagnostics</h3>
+            <p class="desc">Test connectivity to Chutes.ai — models, latency, and endpoint health.</p>
+            <button class="btn-action primary" id="diagBtn">Run Diagnostics</button>
+
+            <!-- Progress tracker -->
+            <div id="diagProgress" style="display:none;margin-top:16px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <div id="diagSpinner" style="width:18px;height:18px;border:2px solid #333;border-top:2px solid var(--primary);border-radius:50%;animation:spin .8s linear infinite;"></div>
+                    <span id="diagStep" style="color:var(--primary);font-size:.85rem;">Starting...</span>
+                </div>
+                <div id="diagLog" style="font-family:monospace;font-size:.78rem;line-height:1.7;color:#777;max-height:120px;overflow-y:auto;"></div>
+            </div>
+            <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+            <!-- Results -->
+            <div id="diagResults" style="margin-top:16px;font-family:monospace;font-size:.85rem;line-height:1.6;color:#ccc;"></div>
+
+            <!-- Copyable raw output (shown on errors or always) -->
+            <div id="diagRawWrap" style="display:none;margin-top:12px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:.8rem;color:#888;">Raw output (click to copy):</span>
+                    <button id="diagCopyBtn" style="background:rgba(255,255,255,.08);border:1px solid #444;color:#aaa;padding:4px 12px;border-radius:8px;font-size:.75rem;cursor:pointer;">📋 Copy</button>
+                </div>
+                <pre id="diagRaw" style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:.78rem;color:#aaa;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;cursor:pointer;user-select:all;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── Config ──
+const API = '';
+const DEFAULT_HOTEL_ID = '2ada3c2b-b208-4599-9c46-f32dc16ff950';
+const HOTEL_ID = new URLSearchParams(location.search).get('id') || DEFAULT_HOTEL_ID;
+const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+const VOICE_ENABLED = false; // disable voice UI until ASR provider is configured
+
+// ── Provider state ──
+let currentProvider = 'chutes';
+let currentModel = '';
+let providersData = {};
+
+// ── DOM ──
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+const chatMessages    = $('#chatMessages');
+const chatInput       = $('#chatInput');
+const chatSendBtn     = $('#chatSendBtn');
+const resetBtn        = $('#resetBtn');
+const chatStatus      = $('#chatStatus');
+const voiceMessages   = $('#voiceMessages');
+const micBtn          = $('#micBtn');
+const micText         = $('#micText');
+const voiceResetBtn   = $('#voiceResetBtn');
+const voiceStatus     = $('#voiceStatus');
+const trBtn           = $('#trBtn');
+const trResult        = $('#trResult');
+const slidesBtn       = $('#slidesBtn');
+const slidesResult    = $('#slidesResult');
+const videoBtn        = $('#videoBtn');
+const videoResult     = $('#videoResult');
+const diagBtn         = $('#diagBtn');
+const diagResults     = $('#diagResults');
+const providerSelect  = $('#providerSelect');
+const modelSelect     = $('#modelSelect');
+const providerBadge   = $('#providerBadge');
+
+// Disable voice features when ASR is not configured
+if (!VOICE_ENABLED) {
+    const voiceTab = document.querySelector('.tab[data-panel=\"voice\"]');
+    if (voiceTab) voiceTab.style.display = 'none';
+    const voicePanel = $('#panel-voice');
+    if (voicePanel) voicePanel.style.display = 'none';
+    if (voiceStatus) voiceStatus.textContent = 'Voice disabled (ASR not configured)';
+    if (micBtn) { micBtn.disabled = true; micBtn.classList.add('disabled'); }
+    if (voiceResetBtn) voiceResetBtn.disabled = true;
+}
+
+// ═══ Tabs ═══
+$$('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        $$('.tab').forEach(t => t.classList.remove('active'));
+        $$('.panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        $(`#panel-${tab.dataset.panel}`).classList.add('active');
+    });
+});
+
+// ═══ Init — hotel branding + providers ═══
+(async function init() {
+    // Load hotel info
+    try {
+        const res = await fetch(`${API}/api/hotel/${HOTEL_ID}`);
+        if (!res.ok) throw new Error(res.status);
+        const cfg = await res.json();
+        $('#hotelName').textContent = cfg.name + (cfg.description ? ` — ${cfg.description}` : '');
+        document.title = cfg.name + ' — NomadAI Showroom';
+    } catch (e) {
+        $('#hotelName').textContent = 'NomadAI Hotel (offline)';
+        console.warn('Hotel init:', e);
+    }
+
+    // Load providers
+    try {
+        const res = await fetch(`${API}/api/providers`);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        providersData = data.providers;
+        currentProvider = data.active_provider;
+        currentModel = data.active_model;
+        renderProviderSelectors();
+    } catch (e) {
+        console.warn('Provider init:', e);
+        providerSelect.innerHTML = '<option value="chutes">Chutes.ai (offline)</option>';
+        modelSelect.innerHTML = '<option>—</option>';
+    }
+})();
+
+function renderProviderSelectors() {
+    // Provider dropdown
+    providerSelect.innerHTML = '';
+    for (const [pid, prov] of Object.entries(providersData)) {
+        if (!prov.configured) continue;
+        const opt = document.createElement('option');
+        opt.value = pid;
+        opt.textContent = prov.name;
+        if (pid === currentProvider) opt.selected = true;
+        providerSelect.appendChild(opt);
+    }
+
+    // Model dropdown
+    renderModelOptions();
+    updateProviderBadge();
+}
+
+function renderModelOptions() {
+    modelSelect.innerHTML = '';
+    const prov = providersData[currentProvider];
+    if (!prov) return;
+    for (const m of prov.models) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = `${m.name} — ${m.desc}`;
+        if (m.id === currentModel) opt.selected = true;
+        modelSelect.appendChild(opt);
+    }
+}
+
+function updateProviderBadge() {
+    const prov = providersData[currentProvider];
+    if (!prov) return;
+    const short = currentModel.split('/').pop();
+    providerBadge.textContent = `${prov.name} / ${short}`;
+    providerBadge.className = `provider-badge ${currentProvider}`;
+}
+
+providerSelect.addEventListener('change', async () => {
+    const newProv = providerSelect.value;
+    try {
+        const r = await fetch(`${API}/api/providers/switch`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ provider: newProv })
+        });
+        const data = await r.json();
+        currentProvider = data.active_provider;
+        currentModel = data.active_model;
+        renderModelOptions();
+        updateProviderBadge();
+        setStatus(chatStatus, `Switched to ${data.provider_name}`);
+    } catch (e) {
+        setStatus(chatStatus, 'Switch failed', true);
+    }
+});
+
+modelSelect.addEventListener('change', async () => {
+    const newModel = modelSelect.value;
+    try {
+        const r = await fetch(`${API}/api/providers/switch`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ provider: currentProvider, model: newModel })
+        });
+        const data = await r.json();
+        currentModel = data.active_model;
+        updateProviderBadge();
+        setStatus(chatStatus, `Model: ${data.active_model.split('/').pop()}`);
+    } catch (e) {
+        setStatus(chatStatus, 'Model switch failed', true);
+    }
+});
+
+// ═══ Chat ═══
+function addMsg(container, role, text) {
+    const d = document.createElement('div');
+    d.className = `msg ${role}`;
+    d.innerHTML = `<div class="lbl">${role === 'user' ? 'You' : 'Concierge'}</div><div>${text}</div>`;
+    container.appendChild(d);
+    container.scrollTop = container.scrollHeight;
+}
+
+async function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    chatInput.value = '';
+    addMsg(chatMessages, 'user', text);
+    setStatus(chatStatus, 'Thinking...');
+    try {
+        const r = await fetch(`${API}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, session_id: sessionId, hotel_id: HOTEL_ID, provider: currentProvider, model: currentModel })
+        });
+        const data = await r.json();
+        if (data.success) {
+            let meta = '';
+            if (data.skill_used && data.skill_used !== 'general_chat' && data.skill_used !== 'demo_mode')
+                meta += ` <span style="font-size:.7rem;color:var(--primary);">[${data.skill_used}]</span>`;
+            const provName = data.provider || currentProvider;
+            const modShort = (data.model || currentModel).split('/').pop();
+            meta += ` <span style="font-size:.65rem;color:#666;">${provName}/${modShort}</span>`;
+            addMsg(chatMessages, 'assistant', data.response + meta);
+            speakText(data.response);
+        } else {
+            setStatus(chatStatus, data.error || 'Error', true);
+        }
+    } catch (e) {
+        setStatus(chatStatus, 'Connection error', true);
+    }
+    setStatus(chatStatus, 'Ready');
+}
+
+chatSendBtn.addEventListener('click', sendChat);
+chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+
+resetBtn.addEventListener('click', async () => {
+    try { await fetch(`${API}/api/reset`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:sessionId}) }); } catch(e) {}
+    chatMessages.innerHTML = '<div class="msg assistant"><div class="lbl">Concierge</div><div>Conversation reset. How can I help?</div></div>';
+    setStatus(chatStatus, 'Ready');
+});
+
+// ═══ Voice ═══
+let mediaRecorder, audioChunks = [], isRecording = false;
+
+async function initMic() {
+    if (!VOICE_ENABLED) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: mime });
+        audioChunks = [];
+        await sendVoice(blob);
+    };
+}
+
+function startRec() {
+    if (!VOICE_ENABLED) {
+        setStatus(voiceStatus, 'Voice disabled (ASR not configured)', true);
+        return;
+    }
+    if (!mediaRecorder || mediaRecorder.state !== 'inactive') return;
+    audioChunks = [];
+    mediaRecorder.start();
+    isRecording = true;
+    if (navigator.vibrate) navigator.vibrate(15);
+    micBtn.className = 'btn-mic recording';
+    micText.textContent = 'Release to Send';
+    setStatus(voiceStatus, 'Listening...');
+}
+
+function stopRec() {
+    if (!VOICE_ENABLED) return;
+    if (!isRecording) return;
+    mediaRecorder.stop();
+    isRecording = false;
+    if (navigator.vibrate) navigator.vibrate([10,50,10]);
+    micBtn.className = 'btn-mic idle';
+    micText.textContent = 'Hold to Speak';
+    setStatus(voiceStatus, 'Processing...');
+}
+
+async function sendVoice(blob) {
+    if (!VOICE_ENABLED) return;
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    reader.onloadend = async () => {
+        try {
+            const r = await fetch(`${API}/api/voice-chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audio_base64: reader.result.split(',')[1], session_id: sessionId, hotel_id: HOTEL_ID })
+            });
+            const data = await r.json();
+            if (data.success) {
+                addMsg(voiceMessages, 'user', data.transcription);
+                addMsg(voiceMessages, 'assistant', data.response);
+                speakText(data.response);
+                setStatus(voiceStatus, 'Ready');
+            } else {
+                setStatus(voiceStatus, data.error || 'Error', true);
+            }
+        } catch (e) {
+            setStatus(voiceStatus, 'Connection error', true);
+        }
+    };
+}
+
+// Touch
+if (VOICE_ENABLED) {
+    micBtn.addEventListener('touchstart', e => { e.preventDefault(); if (!mediaRecorder) initMic().then(startRec); else startRec(); }, { passive:false });
+    micBtn.addEventListener('touchend', e => { e.preventDefault(); stopRec(); }, { passive:false });
+    micBtn.addEventListener('touchcancel', stopRec);
+    // Mouse
+    micBtn.addEventListener('mousedown', () => { if (!mediaRecorder) initMic().then(startRec); else startRec(); });
+    micBtn.addEventListener('mouseup', stopRec);
+    micBtn.addEventListener('mouseleave', () => { if (isRecording) stopRec(); });
+
+    voiceResetBtn.addEventListener('click', async () => {
+        try { await fetch(`${API}/api/reset`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:sessionId}) }); } catch(e) {}
+        voiceMessages.innerHTML = '<div class="msg assistant"><div class="lbl">Concierge</div><div>Conversation reset. Hold the mic to speak.</div></div>';
+        setStatus(voiceStatus, 'Ready');
+    });
+}
+
+// ═══ Translate ═══
+trBtn.addEventListener('click', async () => {
+    const text = $('#trText').value.trim();
+    if (!text) return;
+    trResult.classList.remove('hidden','error');
+    trResult.textContent = 'Translating...';
+    trBtn.disabled = true;
+    try {
+        const r = await fetch(`${API}/api/translate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, source_lang: $('#trFrom').value, target_lang: $('#trTo').value })
+        });
+        const data = await r.json();
+        if (data.success) {
+            trResult.textContent = data.translation;
+        } else {
+            trResult.textContent = data.error || 'Translation failed';
+            trResult.classList.add('error');
+        }
+    } catch (e) {
+        trResult.textContent = 'Connection error: ' + e.message;
+        trResult.classList.add('error');
+    }
+    trBtn.disabled = false;
+});
+
+// ═══ Slides ═══
+slidesBtn.addEventListener('click', async () => {
+    const topic = $('#slidesTopic').value.trim();
+    if (!topic) return;
+    slidesResult.classList.remove('hidden','error');
+    slidesResult.textContent = 'Generating slides... (this may take a minute)';
+    slidesBtn.disabled = true;
+    try {
+        const r = await fetch(`${API}/api/generate-slides`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, num_slides: parseInt($('#slidesNum').value) || 8 })
+        });
+        const data = await r.json();
+        if (data.success) {
+            slidesResult.textContent = data.slides;
+        } else {
+            slidesResult.textContent = data.error || 'Slide generation failed';
+            slidesResult.classList.add('error');
+        }
+    } catch (e) {
+        slidesResult.textContent = 'Connection error: ' + e.message;
+        slidesResult.classList.add('error');
+    }
+    slidesBtn.disabled = false;
+});
+
+// ═══ Video ═══
+videoBtn.addEventListener('click', async () => {
+    const fileInput = $('#videoFile');
+    if (!fileInput.files.length) { alert('Please select an image first'); return; }
+    videoResult.classList.remove('hidden','error');
+    videoResult.textContent = 'Generating video... (this may take a while)';
+    videoBtn.disabled = true;
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onloadend = async () => {
+        const b64 = reader.result.split(',')[1];
+        try {
+            const r = await fetch(`${API}/api/generate-video`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_base64: b64, template: $('#videoTemplate').value })
+            });
+            const data = await r.json();
+            if (data.success) {
+                if (data.video_url && data.video_url !== 'Processing...') {
+                    videoResult.innerHTML = `<a href="${data.video_url}" target="_blank" style="color:var(--primary)">Download Video</a><br>Status: ${data.status}`;
+                } else {
+                    videoResult.textContent = 'Video is processing. Check back later.';
                 }
-                
-                if (data.tests && data.tests.length > 0) {
-                if (data.tests && data.tests.length > 0) {
-                html += '<table style="width:100%;border-collapse:collapse;">';
-                html += '<tr style="color:#888;text-align:left;"><th style="padding:6px;">Model</th><th>Status</th><th>Detail</th><th>Ms</th></tr>';
-                for (const t of data.tests) {
-                    const color = t.status === 'ok' ? '#4caf50' : t.status === 'skip' ? '#888' : '#ff4757';
-                    const icon = t.status === 'ok' ? '\u2705' : t.status === 'skip' ? '\u23ed' : '\u274c';
+            } else {
+                videoResult.textContent = data.error || 'Video generation failed';
+                videoResult.classList.add('error');
+            }
+        } catch (e) {
+            videoResult.textContent = 'Connection error: ' + e.message;
+            videoResult.classList.add('error');
+        }
+        videoBtn.disabled = false;
+    };
+});
+
+// ═══ Diagnostics ═══
+const diagProgress = $('#diagProgress');
+const diagSpinner  = $('#diagSpinner');
+const diagStep     = $('#diagStep');
+const diagLog      = $('#diagLog');
+const diagRawWrap  = $('#diagRawWrap');
+const diagRaw      = $('#diagRaw');
+const diagCopyBtn  = $('#diagCopyBtn');
+
+function diagLogLine(text, color) {
+    const ts = new Date().toLocaleTimeString();
+    diagLog.innerHTML += `<div><span style="color:#555;">[${ts}]</span> <span style="color:${color||'#999'};">${text}</span></div>`;
+    diagLog.scrollTop = diagLog.scrollHeight;
+}
+
+function diagShowRaw(obj) {
+    const txt = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+    diagRaw.textContent = txt;
+    diagRawWrap.style.display = 'block';
+}
+
+diagCopyBtn.addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(diagRaw.textContent);
+        diagCopyBtn.textContent = '✅ Copied!';
+        setTimeout(() => { diagCopyBtn.textContent = '📋 Copy'; }, 2000);
+    } catch {
+        // fallback: select all text
+        const range = document.createRange();
+        range.selectNodeContents(diagRaw);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+    }
+});
+
+diagBtn.addEventListener('click', async () => {
+    // Reset
+    diagResults.innerHTML = '';
+    diagRawWrap.style.display = 'none';
+    diagLog.innerHTML = '';
+    diagProgress.style.display = 'block';
+    diagSpinner.style.display = 'block';
+    diagBtn.disabled = true;
+    diagBtn.textContent = 'Running...';
+
+    const t0 = performance.now();
+    diagStep.textContent = 'Testing all providers...';
+    diagLogLine('→ Sending request to /api/ping', 'var(--primary)');
+
+    let rawData = null;
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
+        diagLogLine('⏱ Timeout set to 90s (testing multiple providers)', '#555');
+
+        const r = await fetch(`${API}/api/ping`, { signal: controller.signal });
+        clearTimeout(timeout);
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        diagLogLine(`← Response received (${elapsed}s, HTTP ${r.status})`, r.ok ? 'var(--success)' : 'var(--danger)');
+
+        if (!r.ok) {
+            const errText = await r.text();
+            diagStep.textContent = 'Server returned an error';
+            diagSpinner.style.display = 'none';
+            diagResults.innerHTML = `<div style="background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);border-radius:10px;padding:16px;">
+                <div style="color:var(--danger);font-weight:600;margin-bottom:8px;">❌ Server Error (HTTP ${r.status})</div>
+                <div style="color:#ccc;font-size:.85rem;">Check server terminal for traceback.</div>
+            </div>`;
+            diagShowRaw({ http_status: r.status, body: errText });
+            diagBtn.disabled = false; diagBtn.textContent = 'Run Diagnostics';
+            return;
+        }
+
+        diagStep.textContent = 'Parsing response...';
+        const data = await r.json();
+        rawData = data;
+        diagLogLine('✓ JSON parsed', 'var(--success)');
+
+        let html = '';
+
+        // Active provider info
+        html += `<div style="margin-bottom:14px;padding:10px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.15);border-radius:8px;">
+            <span style="color:var(--primary);font-weight:600;">Active:</span>
+            <span style="color:#ddd;">${data.active_provider}</span> /
+            <span style="color:#aaa;">${data.active_model}</span>
+        </div>`;
+
+        // Render each provider
+        const providerNames = { chutes: 'Chutes.ai' };
+        const providerColors = { chutes: 'var(--accent)' };
+
+        for (const [pid, prov] of Object.entries(data.providers || {})) {
+            const pcolor = providerColors[pid] || '#ccc';
+            const pname = providerNames[pid] || pid;
+            const keyOk = prov.api_key === 'configured';
+
+            html += `<div style="margin-bottom:18px;padding:14px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;">`;
+            html += `<div style="font-weight:700;color:${pcolor};font-size:1rem;margin-bottom:8px;">${pname}</div>`;
+            html += `<div style="margin-bottom:8px;">API Key: <span style="color:${keyOk ? 'var(--success)' : 'var(--danger)'}; font-weight:600;">${prov.api_key || 'unknown'}</span></div>`;
+
+            if (prov.network) {
+                const n = prov.network;
+                const netOk = n.status === 'ok';
+                html += `<div style="margin-bottom:8px;">Network: <span style="color:${netOk ? 'var(--success)' : 'var(--danger)'};">${n.status}</span> (${n.latency_ms}ms)
+                    ${n.detail ? `<div style="color:#ff9800;font-size:.8rem;">${n.detail}</div>` : ''}
+                </div>`;
+                diagLogLine(`[${pname}] Network: ${n.status} (${n.latency_ms}ms)`, netOk ? 'var(--success)' : 'var(--danger)');
+            }
+
+            if (prov.tests && prov.tests.length > 0) {
+                html += '<table class="diag-table"><tr><th>Model</th><th>Status</th><th>Detail</th><th>Ms</th></tr>';
+                for (const t of prov.tests) {
+                    const ok = t.status === 'ok';
+                    const skip = t.status === 'skip';
+                    const color = ok ? 'var(--success)' : skip ? '#888' : 'var(--danger)';
+                    const icon = ok ? '✅' : skip ? '⏭' : '❌';
                     const detail = t.reply || t.code || t.detail || '';
-                    html += `<tr style="border-top:1px solid #333;">
-                        <td style="padding:8px 6px;color:#ddd;">${t.model}</td>
-                        <td style="color:${color};">${icon} ${t.status}</td>
-                        <td style="color:#aaa;font-size:0.78rem;max-width:200px;word-break:break-all;">${detail.substring(0, 120)}</td>
+                    let explain = '';
+                    if (String(t.code || t.detail || '').includes('1113')) explain = ' (no balance)';
+                    else if (String(t.detail || '').includes('Timeout')) explain = ' (unreachable)';
+                    else if (String(t.detail || '').includes('1110')) explain = ' (bad key)';
+
+                    html += `<tr>
+                        <td style="color:#ddd;font-size:.8rem;">${t.model}</td>
+                        <td style="color:${color};">${icon}</td>
+                        <td style="color:#aaa;font-size:.75rem;max-width:200px;word-break:break-all;">${String(detail).substring(0, 120)}${explain ? `<span style="color:#ff9800;">${explain}</span>` : ''}</td>
                         <td style="color:#888;">${t.latency_ms || '-'}</td>
                     </tr>`;
+                    diagLogLine(`  ${t.model}: ${t.status}${explain}`, color);
                 }
                 html += '</table>';
-                }
-                pingResults.innerHTML = html;
-            } catch (err) {
-                pingResults.innerHTML = `<span style="color:#ff4757;">\u274c Failed to reach API: ${err.message}</span>`;
             }
-        });
-
-        // State
-        let mediaRecorder;
-        let audioChunks = [];
-        let isRecording = false;
-        let uploadedImage = null;
-        const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-
-        // Haptic feedback
-        function vibrate(pattern = 10) {
-            if (navigator.vibrate) {
-                navigator.vibrate(pattern);
-            }
+            html += '</div>';
         }
 
-        // Initialize media recorder
-        async function initMediaRecorder() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
-                });
+        const totalMs = ((performance.now() - t0) / 1000).toFixed(1);
+        html += `<div style="margin-top:12px;font-size:.78rem;color:#555;">Completed in ${totalMs}s</div>`;
+        diagResults.innerHTML = html;
+        diagLogLine(`Done in ${totalMs}s`, 'var(--success)');
+        diagShowRaw(data);
 
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                    ? 'audio/webm;codecs=opus'
-                    : 'audio/webm';
+    } catch (e) {
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        diagLogLine(`FATAL: ${e.message} (${elapsed}s)`, 'var(--danger)');
+        diagStep.textContent = 'Request failed';
 
-                mediaRecorder = new MediaRecorder(stream, { mimeType });
-
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                    }
-                };
-
-                mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: mimeType });
-                    audioChunks = [];
-                    await sendAudioToAPI(audioBlob);
-                };
-
-                setStatus('Ready');
-            } catch (err) {
-                setStatus('Mic access denied', true);
-                recordBtn.disabled = true;
-            }
+        let explanation = '';
+        if (e.name === 'AbortError') {
+            explanation = 'Timed out after 90s. Backend may be hanging.';
+        } else if (e.message.includes('Failed to fetch')) {
+            explanation = 'Cannot connect to backend. Make sure server is running (make server).';
+        } else {
+            explanation = 'Unexpected error contacting backend.';
         }
 
-        function startRecording() {
-            if (!mediaRecorder || mediaRecorder.state !== 'inactive') return;
-            audioChunks = [];
-            mediaRecorder.start();
-            isRecording = true;
-            vibrate(15);
+        diagResults.innerHTML = `<div style="background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);border-radius:10px;padding:16px;">
+            <div style="color:var(--danger);font-weight:600;margin-bottom:8px;">❌ ${e.name}: ${e.message}</div>
+            <div style="color:#ccc;font-size:.85rem;">${explanation}</div>
+        </div>`;
+        diagShowRaw({ error: e.message, name: e.name, elapsed_s: elapsed, hint: explanation });
+    }
 
-            recordBtn.className = 'record-btn recording';
-            recordText.textContent = 'Release to Send';
-            recordingIndicator.classList.add('active');
-            setStatus('Listening...');
-        }
+    diagSpinner.style.display = 'none';
+    diagStep.textContent = 'Finished';
+    diagBtn.disabled = false;
+    diagBtn.textContent = 'Run Diagnostics';
+});
 
-        function stopRecording() {
-            if (!isRecording) return;
-            mediaRecorder.stop();
-            isRecording = false;
-            vibrate([10, 50, 10]);
+// ═══ Helpers ═══
+function setStatus(el, msg, isError = false) {
+    el.textContent = msg;
+    el.className = isError ? 'status-text error' : 'status-text';
+}
 
-            recordBtn.className = 'record-btn idle';
-            recordText.textContent = 'Hold to Speak';
-            recordingIndicator.classList.remove('active');
-            setStatus('Processing...');
-        }
+function speakText(text) {
+    if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text.replace(/\[.*?\]/g, ''));
+        u.rate = 0.95;
+        speechSynthesis.speak(u);
+    }
+}
 
-        // Touch events for hold-to-record
-        recordBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (!mediaRecorder) {
-                initMediaRecorder().then(() => startRecording());
-            } else {
-                startRecording();
-            }
-        }, { passive: false });
-
-        recordBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            stopRecording();
-        }, { passive: false });
-
-        recordBtn.addEventListener('touchcancel', (e) => {
-            stopRecording();
-        });
-
-        // Mouse events for desktop
-        recordBtn.addEventListener('mousedown', () => {
-            if (!mediaRecorder) {
-                initMediaRecorder().then(() => startRecording());
-            } else {
-                startRecording();
-            }
-        });
-
-        recordBtn.addEventListener('mouseup', stopRecording);
-        recordBtn.addEventListener('mouseleave', () => {
-            if (isRecording) stopRecording();
-        });
-
-        // Send audio to API
-        async function sendAudioToAPI(audioBlob) {
-            try {
-                const reader = new FileReader();
-                reader.readAsDataURL(audioBlob);
-                reader.onloadend = async () => {
-                    const base64Audio = reader.result.split(',')[1];
-                    const response = await fetch(`${API_BASE}/api/voice-chat`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ audio_base64: base64Audio, session_id: sessionId })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        addMessage('user', data.transcription);
-                        addMessage('assistant', data.response);
-                        setStatus('Ready');
-                        speakResponse(data.response);
-                        vibrate(10);
-                    } else {
-                        setStatus(data.error || 'Error occurred', true);
-                    }
-                };
-            } catch (err) {
-                setStatus('Connection error', true);
-            }
-        }
-
-        // Send text message
-        async function sendTextMessage() {
-            const message = textInput.value.trim();
-            if (!message) return;
-            textInput.value = '';
-            textInput.blur();
-            addMessage('user', message);
-            setStatus('Thinking...');
-
-            try {
-                const response = await fetch(`${API_BASE}/api/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message, session_id: sessionId })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    addMessage('assistant', data.response);
-                    setStatus('Ready');
-                    speakResponse(data.response);
-                } else {
-                    setStatus(data.error || 'Error occurred', true);
-                }
-            } catch (err) {
-                setStatus('Connection error', true);
-            }
-        }
-
-        // Event listeners
-        sendBtn.addEventListener('click', sendTextMessage);
-        textInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                sendTextMessage();
-            }
-        });
-
-        resetBtn.addEventListener('click', async () => {
-            vibrate(10);
-            try {
-                await fetch('/api/reset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-
-                chatContainer.innerHTML = `
-                    <div class="message assistant">
-                        <div class="label">NomadAI</div>
-                        <div>Conversation reset. How can I help you?</div>
-                    </div>
-                `;
-                setStatus('Ready');
-            } catch (err) {
-                setStatus('Error resetting', true);
-            }
-        });
-
-        // UI helpers
-        function addMessage(role, text) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${role}`;
-            messageDiv.innerHTML = `
-                <div class="label">${role === 'user' ? 'You' : 'NomadAI'}</div>
-                <div>${text}</div>
-            `;
-            chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
-        function setStatus(message, isError = false) {
-            status.textContent = message;
-            status.className = isError ? 'status error' : 'status';
-        }
-
-        function showResult(elementId, content) {
-            const el = document.getElementById(elementId);
-            el.textContent = content;
-            el.classList.remove('hidden');
-        }
-
-        function speakResponse(text) {
-            if ('speechSynthesis' in window) {
-                speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 0.95;
-                speechSynthesis.speak(utterance);
-            }
-        }
-
-        // Initialize
-        initMediaRecorder();
-
-        // Prevent pull-to-refresh on mobile
-        document.body.addEventListener('touchmove', (e) => {
-            if (e.target.closest('.chat-container')) return;
-            e.preventDefault();
-        }, { passive: false });
-    </script>
+document.body.addEventListener('touchmove', e => {
+    if (e.target.closest('.chat-messages')) return;
+    if (document.body.scrollTop === 0) e.preventDefault();
+}, { passive: false });
+</script>
 </body>
 </html>

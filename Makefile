@@ -22,22 +22,22 @@ server-bg:
 	@echo "Starting Hotel Assistant Server in background..."
 	@FLASK_DEBUG=0 /Users/andreyzherditskiy/work/zai-voice-2/.venv/bin/python api/index.py > server_run.log 2>&1 &
 	@sleep 2
-	@curl -s http://127.0.0.1:8000/api/health > /dev/null && echo "✓ Server running on http://localhost:8000" || echo "✗ Server failed to start"
+	@curl -s http://127.0.0.1:8088/api/health > /dev/null && echo "✓ Server running on http://localhost:8088" || echo "✗ Server failed to start"
 
 # Stop the running server
 server-stop:
-	@echo "Stopping server on port 8000..."
-	@PID=$$(lsof -ti:8000); \
+	@echo "Stopping server on port 8088..."
+	@PID=$$(lsof -ti:8088); \
 	if [ -n "$$PID" ]; then \
 		kill $$PID 2>/dev/null && echo "✓ Server stopped (PID $$PID)"; \
 	else \
-		echo "No server running on port 8000"; \
+		echo "No server running on port 8088"; \
 	fi
 
 # Open the web widget in the default browser
 web:
 	@echo "Opening Hotel Assistant..."
-	@open "http://localhost:8000/hotel.html"
+	@open "http://localhost:8088"
 
 # Watch logs
 logs:

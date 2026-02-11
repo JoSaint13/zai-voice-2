@@ -57,17 +57,19 @@ Tests for Flask API endpoints with comprehensive mock fixtures.
 
 **Test Classes:**
 - `TestChatEndpoint` (4 tests)
-- `TestTranscriptionEndpoint` (4 tests)
-- `TestVoiceChatEndpoint` (4 tests)
-- `TestSessionManagement` (3 tests)
-- `TestHomeEndpoint` (1 test)
+- `TestTranscribeEndpoint` (1 test — 501 stub)
+- `TestVoiceChatEndpoint` (1 test — 501 stub)
+- `TestTranslateEndpoint` (2 tests)
+- `TestSlidesEndpoint` (1 test — 501 stub)
+- `TestVideoEndpoint` (1 test — 501 stub)
+- `TestProvidersEndpoint` (1 test)
+- `TestSessionManagement` (2 tests)
 
 **Key Features:**
-- Mocked ZhipuAI client for safe testing
+- Mocked Chutes.ai HTTP calls for safe testing
 - Tests both success and error paths
 - Validates request/response formats
-- Session isolation verification
-- 16 total tests covering all API endpoints
+- Verifies 501 stubs for unavailable features
 
 **Run API Tests:**
 ```bash
@@ -215,7 +217,7 @@ Use this checklist to validate the implementation:
 ## Test Data
 
 All tests use mock data:
-- No actual API calls to ZhipuAI
+- No actual API calls to Chutes.ai
 - No real audio files needed
 - No GPU/inference required
 - Fast test execution (seconds, not minutes)
@@ -258,8 +260,8 @@ All tests use mock data:
 ## Troubleshooting
 
 ### Test Import Errors
-**Problem:** `ModuleNotFoundError: No module named 'zhipuai'`
-**Solution:** This is expected - tests mock this module before importing
+**Problem:** `ModuleNotFoundError`
+**Solution:** Ensure all dependencies from `requirements.txt` are installed
 
 ### Flask Tests Failing
 **Problem:** API tests can't initialize app

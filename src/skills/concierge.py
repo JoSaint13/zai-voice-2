@@ -1,11 +1,12 @@
 """
 Hotel Concierge Skills
 Handles room service, housekeeping, amenities info, and WiFi help.
+Uses Chutes.ai via shared chat_provider.
 """
 
 import os
 from typing import Dict, Any, List
-from zhipuai import ZhipuAI
+from src.skills.chat_provider import skill_chat
 
 
 class RoomServiceSkill:
@@ -22,25 +23,12 @@ class RoomServiceSkill:
     ]
 
     def __init__(self):
-        api_key = os.getenv("ZHIPUAI_API_KEY")
-        if not api_key:
-            raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-        self.client = ZhipuAI(api_key=api_key)
+        pass
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute room service order flow.
-
-        Args:
-            context: Contains 'transcription', 'session_id', 'user_preferences', etc.
-
-        Returns:
-            Dict with 'response', 'action', and 'metadata'
-        """
         transcription = context.get("transcription", "")
         session_id = context.get("session_id", "default")
 
-        # Use GLM-4.7 to process the room service request
         messages = [
             {
                 "role": "system",
@@ -51,18 +39,10 @@ class RoomServiceSkill:
                 Beverages (Coffee, Tea, Soft drinks, Wine).
                 Always confirm the order and room number before processing."""
             },
-            {
-                "role": "user",
-                "content": transcription
-            }
+            {"role": "user", "content": transcription}
         ]
 
-        response = self.client.chat.completions.create(
-            model="glm-4.7",
-            messages=messages
-        )
-
-        assistant_message = response.choices[0].message.content
+        assistant_message = skill_chat(messages)
 
         return {
             "response": assistant_message,
@@ -89,21 +69,9 @@ class HousekeepingSkill:
     ]
 
     def __init__(self):
-        api_key = os.getenv("ZHIPUAI_API_KEY")
-        if not api_key:
-            raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-        self.client = ZhipuAI(api_key=api_key)
+        pass
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute housekeeping request.
-
-        Args:
-            context: Contains 'transcription', 'session_id', etc.
-
-        Returns:
-            Dict with 'response', 'action', and 'metadata'
-        """
         transcription = context.get("transcription", "")
         session_id = context.get("session_id", "default")
 
@@ -116,18 +84,10 @@ class HousekeepingSkill:
                 toiletries, pillows/blankets, laundry service.
                 Confirm the request and provide estimated time (usually 15-30 minutes)."""
             },
-            {
-                "role": "user",
-                "content": transcription
-            }
+            {"role": "user", "content": transcription}
         ]
 
-        response = self.client.chat.completions.create(
-            model="glm-4.7",
-            messages=messages
-        )
-
-        assistant_message = response.choices[0].message.content
+        assistant_message = skill_chat(messages)
 
         return {
             "response": assistant_message,
@@ -154,25 +114,12 @@ class AmenitiesSkill:
     ]
 
     def __init__(self):
-        api_key = os.getenv("ZHIPUAI_API_KEY")
-        if not api_key:
-            raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-        self.client = ZhipuAI(api_key=api_key)
+        pass
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Provide amenities information.
-
-        Args:
-            context: Contains 'transcription', 'session_id', etc.
-
-        Returns:
-            Dict with 'response', 'action', and 'metadata'
-        """
         transcription = context.get("transcription", "")
         session_id = context.get("session_id", "default")
 
-        # Knowledge base about hotel amenities
         amenities_kb = """
         Hotel Amenities:
         - Pool: Open 6 AM - 10 PM daily
@@ -194,18 +141,10 @@ class AmenitiesSkill:
                 {amenities_kb}
                 """
             },
-            {
-                "role": "user",
-                "content": transcription
-            }
+            {"role": "user", "content": transcription}
         ]
 
-        response = self.client.chat.completions.create(
-            model="glm-4.7",
-            messages=messages
-        )
-
-        assistant_message = response.choices[0].message.content
+        assistant_message = skill_chat(messages)
 
         return {
             "response": assistant_message,
@@ -232,25 +171,12 @@ class WifiSkill:
     ]
 
     def __init__(self):
-        api_key = os.getenv("ZHIPUAI_API_KEY")
-        if not api_key:
-            raise ValueError("ZHIPUAI_API_KEY environment variable is required")
-        self.client = ZhipuAI(api_key=api_key)
+        pass
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Provide WiFi credentials and help.
-
-        Args:
-            context: Contains 'transcription', 'session_id', etc.
-
-        Returns:
-            Dict with 'response', 'action', and 'metadata'
-        """
         transcription = context.get("transcription", "")
         session_id = context.get("session_id", "default")
 
-        # WiFi credentials (in production, fetch from PMS based on room)
         wifi_info = """
         Network Name: NomadAI-Guest
         Password: Welcome2026!
@@ -271,18 +197,10 @@ class WifiSkill:
                 If they have connectivity issues, suggest: restart device,
                 forget network and reconnect, or contact front desk."""
             },
-            {
-                "role": "user",
-                "content": transcription
-            }
+            {"role": "user", "content": transcription}
         ]
 
-        response = self.client.chat.completions.create(
-            model="glm-4.7",
-            messages=messages
-        )
-
-        assistant_message = response.choices[0].message.content
+        assistant_message = skill_chat(messages)
 
         return {
             "response": assistant_message,

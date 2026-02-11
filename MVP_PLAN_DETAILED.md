@@ -70,9 +70,9 @@
                  ↓
 ┌─────────────────────────────────────────┐
 │          AI LAYER                       │
-│  • Z.AI GLM-4.7 (Chat)                 │
-│  • Z.AI ASR (Voice-to-Text)            │
-│  • Z.AI Translation                     │
+│  • Chutes.ai Chutes LLM (Chat)                 │
+│  • Chutes.ai ASR (Voice-to-Text)            │
+│  • Chutes.ai Translation                     │
 │  • Browser TTS (Voice Output)           │
 │  • LangChain + RAG                      │
 └─────────────────────────────────────────┘
@@ -105,7 +105,7 @@ Framework: FastAPI 0.109+
 ORM: SQLAlchemy 2.0
 Migrations: Alembic
 Auth: python-jose (JWT)
-AI: Z.AI API (уже интегрировано!)
+AI: Chutes.ai API (уже интегрировано!)
 RAG: LangChain + Pinecone
 Deployment: Railway ($5/month) или Render (бесплатно)
 ```
@@ -244,9 +244,9 @@ app.add_middleware(
 ---
 
 ### НЕДЕЛЯ 2: AI Интеграция (RAG)
-**Цель**: Перенести существующую Z.AI интеграцию и добавить RAG
+**Цель**: Перенести существующую Chutes.ai интеграцию и добавить RAG
 
-#### День 8-9: Миграция Z.AI кода
+#### День 8-9: Миграция Chutes.ai кода
 ```python
 # 1. Скопировать из текущего проекта
 # api/index.py -> backend/services/ai_service.py
@@ -256,10 +256,10 @@ app.add_middleware(
 class ZAIClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_url = "https://api.z.ai/api"
+        self.base_url = "https://api.chutes.ai"
         
     async def chat(self, messages: List[dict]) -> str:
-        """GLM-4.7 chat with answer extraction"""
+        """Chutes LLM chat with answer extraction"""
         # Уже есть этот код!
         
     async def transcribe(self, audio_base64: str) -> str:
@@ -272,7 +272,7 @@ class ZAIClient:
 ```
 
 **Deliverables:**
-- ✅ Z.AI интеграция в FastAPI
+- ✅ Chutes.ai интеграция в FastAPI
 - ✅ Async endpoints
 - ✅ Error handling улучшен
 
@@ -368,7 +368,7 @@ async def chat(
     If you don't know, say "Let me connect you with reception."
     """
     
-    # 4. Call Z.AI with context
+    # 4. Call Chutes.ai with context
     messages = [
         {"role": "system", "content": system_prompt},
         *request.conversation_history,
@@ -901,7 +901,7 @@ railway up            # Backend
 ### Месячные Costs (MVP)
 ```
 AI APIs:
-- Z.AI: $50-100/month (первые 100K tokens бесплатно)
+- Chutes.ai: $50-100/month (первые 100K tokens бесплатно)
 - OpenAI Embeddings: $20-50/month
 - Google Maps: $50/month (бесплатные $200 кредит)
 
@@ -969,7 +969,7 @@ TOTAL: ~$50-100/month
 - [ ] Backend deployed и работает
 - [ ] Frontend deployed (Vercel)
 - [ ] Database setup (PostgreSQL, Redis, Pinecone)
-- [ ] Z.AI API key настроен
+- [ ] Chutes.ai API key настроен
 - [ ] Google Maps API key
 - [ ] 1 пилотный отель готов
 - [ ] Knowledge base заполнена

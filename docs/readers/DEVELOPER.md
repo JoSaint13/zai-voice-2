@@ -28,12 +28,12 @@ cd zai-voice-2
 pip install -r requirements.txt
 
 # Set API key
-export ZHIPUAI_API_KEY='your_key_here'
+export CHUTES_API_KEY='cpk_your_key_here'
 
 # Run locally
 python api/index.py
 
-# Open http://localhost:3000
+# Open http://localhost:8088
 ```
 
 ---
@@ -74,8 +74,8 @@ python api/index.py
           │               │               │               │
           ▼               ▼               ▼               ▼
      ┌─────────┐    ┌──────────┐   ┌─────────┐    ┌─────────┐
-     │   PMS   │    │ RAG + Maps│  │CogView/ │    │ Config  │
-     │  APIs   │    │   APIs   │   │CogVideo │    │  Store  │
+     │   PMS   │    │ RAG + Maps│  │ Media   │    │ Config  │
+     │  APIs   │    │   APIs   │   │ (future)|    │  Store  │
      └─────────┘    └──────────┘   └─────────┘    └─────────┘
 ```
 
@@ -87,8 +87,8 @@ python api/index.py
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/transcribe` | POST | Audio → Text (GLM-ASR) |
-| `/api/chat` | POST | Text → Response (GLM-4.7) |
+| `/api/transcribe` | POST | Audio → Text (ASR not configured; returns 501) |
+| `/api/chat` | POST | Text → Response (Chutes.ai) |
 | `/api/voice-chat` | POST | Audio → Response (combined) |
 | `/api/reset` | POST | Clear session |
 
@@ -130,22 +130,21 @@ registry = SkillRegistry()
 registry.register(RoomServiceSkill())
 ```
 
-### 3. Z.AI Integration
+### 3. Chutes.ai Integration
 
-**Speech-to-Text:**
+**Chat Completion (via shared provider):**
 ```python
-from zhipuai import ZhipuAI
+from src.skills.chat_provider import skill_chat
 
-client = ZhipuAI(api_key=os.getenv('ZHIPUAI_API_KEY'))
-
-# Transcribe audio
-with open('audio.wav', 'rb') as f:
-    result = client.audio.transcriptions.create(
-        model='glm-asr-2512',
-        file=f
-    )
-print(result.text)
+messages = [
+    {"role": "system", "content": "You are a hotel concierge."},
+    {"role": "user", "content": "What time is breakfast?"}
+]
+result = skill_chat(messages)
+print(result)
 ```
+
+> Note: Speech-to-text is not currently available (ASR provider not configured).
 
 **Chat Completion:**
 ```python
@@ -262,7 +261,7 @@ python scripts/demo.py
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ZHIPUAI_API_KEY` | Yes | Z.AI API key |
+| `CHUTES_API_KEY` | Yes | Chutes.ai API key |
 | `FLASK_ENV` | No | development/production |
 | `LOG_LEVEL` | No | DEBUG/INFO/WARNING |
 
@@ -280,7 +279,7 @@ npm i -g vercel
 vercel --prod
 
 # Set environment variable
-vercel env add ZHIPUAI_API_KEY
+vercel env add CHUTES_API_KEY
 ```
 
 ### Docker
@@ -296,7 +295,7 @@ CMD ["python", "api/index.py"]
 
 ```bash
 docker build -t nomadai .
-docker run -p 3000:3000 -e ZHIPUAI_API_KEY=xxx nomadai
+docker run -p 8088:8088 -e CHUTES_API_KEY=cpk_xxx nomadai
 ```
 
 ---
@@ -325,16 +324,16 @@ mypy src/
 
 | Issue | Solution |
 |-------|----------|
-| `ZHIPUAI_API_KEY not set` | `export ZHIPUAI_API_KEY='...'` |
+| `CHUTES_API_KEY not set` | `export CHUTES_API_KEY='cpk_...'` |
 | Audio not recording | Check browser microphone permissions |
-| Slow responses | Check network latency to Z.AI API |
+| Slow responses | Check network latency to Chutes.ai |
 | Skill not triggering | Verify `can_handle()` logic |
 
 ---
 
 ## Resources
 
-- [Z.AI Documentation](https://docs.z.ai)
+- [Chutes.ai](https://chutes.ai)
 - [Flask Documentation](https://flask.palletsprojects.com/)
 - [Architecture Doc](ARCHITECTURE.md)
 - [PRD](PRD.md)

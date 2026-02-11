@@ -78,16 +78,16 @@
 | Competitor | Gap | NomadAI Advantage |
 |------------|-----|-------------------|
 | Canary Technologies | No voice | Voice-first experience |
-| Akia | English only | 20+ languages with GLM-ASR |
+| Akia | English only | 20+ languages with ASR |
 | Duve | No real-time | <2 sec response time |
 | ChatGPT wrappers | Hallucinations | RAG-based accuracy |
 
 ### Unique Technology Stack
 
-- **GLM-ASR-2512**: Best-in-class dialect support (Cantonese, regional)
-- **GLM-4.7**: Advanced reasoning for complex requests
-- **CogView-4**: Generate destination preview images
-- **CogVideoX**: Create personalized tour videos
+- **ASR (not configured)**: Best-in-class dialect support (Cantonese, regional)
+- **Chutes LLM**: Advanced reasoning for complex requests
+- **Image generation (not available)**: Generate destination preview images
+- **Video generation (not available)**: Create personalized tour videos
 
 ---
 
@@ -116,7 +116,7 @@
 
 | Component | Investment | ROI |
 |-----------|------------|-----|
-| Z.AI API costs | ~$0.01/query | 100x vs human labor |
+| Chutes.ai API costs | ~$0.01/query | 100x vs human labor |
 | Development | 4-week MVP | Fast time-to-market |
 | Infrastructure | Vercel serverless | Zero ops overhead |
 

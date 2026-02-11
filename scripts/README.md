@@ -78,7 +78,7 @@ For testing against remote API servers.
 5. **Transcription Endpoint** (Step 4)
    - Tests with dummy WAV file
    - Validates endpoint structure
-   - Notes: Requires valid ZHIPUAI_API_KEY for actual transcription
+   - Notes: Transcription is a 501 stub (ASR not available via Chutes)
 
 ### Example Output
 
@@ -149,9 +149,9 @@ python api/index.py
 ```
 
 #### "API Error" messages during transcription
-This is expected if `ZHIPUAI_API_KEY` is not set:
+This is expected — transcription is not available:
 ```bash
-export ZHIPUAI_API_KEY='your-api-key-here'
+export CHUTES_API_KEY='cpk_your_key_here'
 ```
 
 #### Custom API endpoint issues

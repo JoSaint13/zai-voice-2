@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""Test Z.AI API integration"""
+"""Test API integration"""
 import os
 import sys
 import requests
 
-os.environ["ZHIPUAI_API_KEY"] = "507b2d0bb71945aab07c0e22bc666d4a.RiY1d2GYmM0Eodp3"
+os.environ.setdefault("CHUTES_API_KEY", "cpk_test_key")
 
 # Add api directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'api'))

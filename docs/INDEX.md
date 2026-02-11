@@ -1,6 +1,6 @@
 # NomadAI Documentation Index
 
-> **NomadAI** - Voice-first hotel smart assistant powered by Z.AI
+> **NomadAI** - Voice-first hotel smart assistant powered by Chutes.ai
 
 **Version:** 0.1.0 | **Status:** MVP Complete | **Last Updated:** 2026-02-08
 
@@ -84,10 +84,10 @@ zai-voice-2/
 
 | Component | Technology | Documentation |
 |-----------|------------|---------------|
-| Speech Recognition | GLM-ASR-2512 | [Z.AI Docs](https://docs.z.ai/guides/audio/glm-asr-2512) |
-| Conversation | GLM-4.7 | [Z.AI API](https://docs.z.ai/api/glm-4) |
-| Image Generation | CogView-4 | [Z.AI CogView](https://docs.z.ai/api/cogview) |
-| Video Generation | CogVideoX | [Z.AI CogVideo](https://docs.z.ai/api/cogvideo) |
+| Conversation | Chutes.ai (DeepSeek/Qwen) | Chutes.ai chat completions |
+| Translation | Chutes.ai | Built-in translation via chat models |
+| Speech Recognition | — | Not configured |
+| Image/Video Generation | — | Not available |
 | Backend | Flask/Python | [Flask Docs](https://flask.palletsprojects.com/) |
 | Deployment | Vercel | [Vercel Docs](https://vercel.com/docs) |
 

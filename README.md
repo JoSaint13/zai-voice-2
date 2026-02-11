@@ -4,7 +4,7 @@
 ![Status](https://img.shields.io/badge/status-MVP-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-> Voice-first hotel smart assistant powered by Z.AI
+> Voice-first hotel smart assistant powered by Chutes.ai
 
 **[Documentation](docs/INDEX.md)** | **[Changelog](CHANGELOG.md)** | **[Roadmap](docs/ROADMAP.md)**
 
@@ -19,12 +19,12 @@ NomadAI is an AI-powered voice assistant for hotels that combines:
 
 ## Tech Stack
 
-| Component | Model | Purpose |
-|-----------|-------|---------|
-| Speech Recognition | GLM-ASR-2512 | 20+ languages, dialect support |
-| Conversation | GLM-4.7 | Intelligent responses |
-| Image Generation | CogView-4 | Destination previews |
-| Video Generation | CogVideoX | Tour videos |
+| Component | Provider | Purpose |
+|-----------|----------|---------|
+| Conversation | Chutes.ai (default: DeepSeek V3) | Intelligent responses, tool use |
+| Translation | Chutes.ai | Multilingual chat/translate |
+| Speech Recognition | — (not configured) | Planned |
+| Media Generation | — (not available) | Planned |
 
 ---
 
@@ -37,7 +37,7 @@ NomadAI is an AI-powered voice assistant for hotels that combines:
 vercel --prod
 
 # Set API key
-vercel env add ZHIPUAI_API_KEY
+vercel env add CHUTES_API_KEY
 ```
 
 ### Local
@@ -47,7 +47,7 @@ vercel env add ZHIPUAI_API_KEY
 pip install -r requirements.txt
 
 # Configure
-export ZHIPUAI_API_KEY='your_key_here'
+export CHUTES_API_KEY='cpk_your_key_here'
 
 # Run
 python api/index.py

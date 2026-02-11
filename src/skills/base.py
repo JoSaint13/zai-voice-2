@@ -607,7 +607,7 @@ class BackendService(Protocol):
 
 
 class AIService(Protocol):
-    """Protocol for AI service calls (GLM-4.7, etc.)."""
+    """Protocol for AI service calls (LLM/chat provider)."""
 
     async def chat(
         self,

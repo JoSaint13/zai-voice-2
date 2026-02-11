@@ -99,9 +99,9 @@ AI-powered multilingual voice & chat assistant for hotels that helps travelers w
 ┌─────────────────────────────────────────────────────────┐
 │                   AI/ML LAYER                            │
 ├─────────────────────────────────────────────────────────┤
-│  • Z.AI / GLM-4 (Chat & Reasoning)                      │
-│  • Z.AI ASR (Speech-to-Text)                            │
-│  • Z.AI Translation Agent                               │
+│  • Chutes.ai LLMs (Chat & Reasoning)                         │
+│  • Chutes.ai ASR (Speech-to-Text)                            │
+│  • Chutes.ai Translation Agent                               │
 │  • OpenAI GPT-4 (fallback/specialized tasks)            │
 │  • Embedding Models (RAG for hotel knowledge)           │
 │  • TTS (Text-to-Speech) - ElevenLabs / Azure            │
@@ -166,10 +166,10 @@ AI-powered multilingual voice & chat assistant for hotels that helps travelers w
 
 ### AI/ML Stack
 ```python
-# Already have Z.AI integration ✅
-- Chat: GLM-4.7 (via Z.AI REST API)
-- ASR: GLM-ASR-2512
-- Translation: Z.AI Translation Agent
+# Already have Chutes.ai integration ✅
+- Chat: Chutes LLM (via Chutes.ai REST API)
+- ASR: ASR (not configured)
+- Translation: Chutes.ai Translation Agent
 - TTS: ElevenLabs API / Azure TTS
 - Embeddings: OpenAI text-embedding-3-small
 - RAG: LangChain + Pinecone
@@ -341,7 +341,7 @@ class Booking:
 ### Week 1-2: Setup & Foundation
 ```bash
 ✅ Already have:
-- Flask backend with Z.AI integration
+- Flask backend with Chutes.ai integration
 - Voice chat (ASR + TTS)
 - Translation
 - Basic UI
@@ -412,7 +412,7 @@ class Booking:
 Monthly Operating Costs (100 hotels):
 
 AI APIs:
-- Z.AI: ~$500/month (chat + ASR)
+- Chutes.ai: ~$500/month (chat + ASR)
 - TTS: ~$200/month
 - Embeddings: ~$100/month
 
@@ -489,7 +489,7 @@ hotel-assistant-saas/
 │   ├── core/
 │   │   ├── config.py            # Settings
 │   │   ├── security.py          # JWT, hashing
-│   │   └── ai_client.py         # Z.AI integration
+│   │   └── ai_client.py         # Chutes.ai integration
 │   ├── models/
 │   │   ├── hotel.py
 │   │   ├── conversation.py
@@ -608,7 +608,7 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id);
 5. 🔄 Create landing page
 
 ### Short-term (Next 2 Weeks)
-1. Migrate existing Z.AI integration to FastAPI
+1. Migrate existing Chutes.ai integration to FastAPI
 2. Build hotel admin portal
 3. Create sample hotel knowledge base
 4. Test with 1 pilot hotel (friend's hotel?)
@@ -624,7 +624,7 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id);
 ## 📚 Resources & References
 
 ### APIs to Research
-- Z.AI: https://docs.z.ai (already using ✅)
+- Chutes.ai: provider docs (internal portal) (already using ✅)
 - Google Maps: https://developers.google.com/maps
 - OpenTable: https://www.opentable.com/developers
 - TripAdvisor: https://www.tripadvisor.com/developers
@@ -660,7 +660,7 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id);
 ### Should We Build This?
 
 **Pros:**
-✅ Existing foundation (voice chat, Z.AI integration)
+✅ Existing foundation (voice chat, Chutes.ai integration)
 ✅ Clear market need (hotels need multilingual support)
 ✅ Scalable SaaS model
 ✅ Low initial costs (leverage existing AI APIs)
@@ -691,7 +691,7 @@ Before building, answer these:
    - What's their budget?
 
 2. **Technical Feasibility**
-   - Can Z.AI handle hotel-specific queries?
+   - Can Chutes.ai handle hotel-specific queries?
    - Is RAG reliable enough?
    - Will voice work in noisy hotel environments?
 

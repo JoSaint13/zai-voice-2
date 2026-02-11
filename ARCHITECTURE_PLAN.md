@@ -1,11 +1,11 @@
 # Hotel Smart Assistant - Technical Architecture Plan
 
 ## Business Goal
-Transform generic "z.ai" voice assistant into a B2B SaaS "White-label AI Concierge" for hotels.
+Transform the legacy voice assistant into a Chutes.ai-powered B2B SaaS "White-label AI Concierge" for hotels.
 
 ## Current State (MVP v0.1)
 - **Frontend:** Single HTML file, hardcoded to "Grand Budapest Hotel".
-- **Backend:** Flask app calling Z.AI (GLM-4.7) with RAG from SQLite.
+- **Backend:** Flask app calling Chutes.ai (DeepSeek/Qwen models) with RAG from SQLite.
 - **Data:** SQLite database w/ `hotels` and `recommendations`.
 - **Gaps:** No true multi-tenancy, no structured upsell actions, no admin API.
 

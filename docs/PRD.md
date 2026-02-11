@@ -10,19 +10,19 @@
 
 ## 1. Executive Summary
 
-**NomadAI Voice Agent** is the voice-first interface for the NomadAI hotel smart assistant platform. It enables guests to interact naturally using speech in 20+ languages, powered by Z.AI's GLM model stack. The voice agent serves as the foundation for a full-featured digital concierge and sightseeing expert system.
+**NomadAI Voice Agent** is the voice-first interface for the NomadAI hotel smart assistant platform. It enables guests to interact naturally using speech in 20+ languages, powered by Chutes.ai's Chutes.ai model stack. The voice agent serves as the foundation for a full-featured digital concierge and sightseeing expert system.
 
 ### Vision
 > "Speak to your hotel like you'd speak to a local friend"
 
-### Z.AI Model Stack
+### Chutes.ai Model Stack
 | Capability | Model | Purpose |
 |------------|-------|---------|
-| Speech Recognition | GLM-ASR-2512 | 20+ languages, dialect support |
-| Conversation | GLM-4.7 | Intent handling, RAG, reasoning |
-| Voice Synthesis | GLM-4-Voice | Natural speech output |
-| Image Generation | CogView-4 | Destination previews |
-| Video Generation | CogVideoX | Personalized tour videos |
+| Speech Recognition | ASR (not configured) | 20+ languages, dialect support |
+| Conversation | Chutes LLM | Intent handling, RAG, reasoning |
+| Voice Synthesis | TTS (not configured) | Natural speech output |
+| Image Generation | Image generation (not available) | Destination previews |
+| Video Generation | Video generation (not available) | Personalized tour videos |
 
 ---
 
@@ -91,11 +91,11 @@
 
 | Skill | Input | Output | Models |
 |-------|-------|--------|--------|
-| **Listen** | Guest speech (any language) | Transcribed text | GLM-ASR-2512 |
-| **Understand** | Text + context | Intent + entities | GLM-4.7 |
-| **Respond** | Response text | Natural speech | GLM-4-Voice |
-| **Visualize** | Description | Image | CogView-4 |
-| **Animate** | Scene description | Video clip | CogVideoX |
+| **Listen** | Guest speech (any language) | Transcribed text | ASR (not configured) |
+| **Understand** | Text + context | Intent + entities | Chutes LLM |
+| **Respond** | Response text | Natural speech | TTS (not configured) |
+| **Visualize** | Description | Image | Image generation (not available) |
+| **Animate** | Scene description | Video clip | Video generation (not available) |
 
 ### 5.2 Hotel Concierge Skills
 
@@ -120,8 +120,8 @@
 | `SEE-004` | Events | "What's happening today?" | Events API lookup |
 | `SEE-005` | Booking | "Book that temple tour" | Partner API (Viator) |
 | `SEE-006` | Translation | "How do I say thank you?" | Translate + pronounce |
-| `SEE-007` | Destination Preview | "Show me what Kyoto looks like" | CogView-4 generation |
-| `SEE-008` | Video Tour | "Create a video of my walking route" | CogVideoX generation |
+| `SEE-007` | Destination Preview | "Show me what Kyoto looks like" | Image generation (not available) generation |
+| `SEE-008` | Video Tour | "Create a video of my walking route" | Video generation (not available) generation |
 
 ### 5.4 System Skills
 
@@ -154,7 +154,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                      VOICE PROCESSING                           │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │                   GLM-ASR-2512                          │   │
+│  │                   ASR (not configured)                          │   │
 │  │         Speech Recognition (20+ languages)              │   │
 │  └─────────────────────────┬───────────────────────────────┘   │
 │                            │                                    │
@@ -169,7 +169,7 @@
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
 │  CONCIERGE   │ │ SIGHTSEEING  │ │    MEDIA     │ │   SYSTEM     │
 │    AGENT     │ │    AGENT     │ │    AGENT     │ │   AGENT      │
-│  (GLM-4.7)   │ │ (GLM-4.7+RAG)│ │(CogView/Vid) │ │  (GLM-4.7)   │
+│  (Chutes LLM)   │ │ (Chutes LLM+RAG)│ │(Media: future provider) │ │  (Chutes LLM)   │
 └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
        │                │                │                │
        ▼                ▼                ▼                ▼
@@ -185,13 +185,13 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                      VOICE OUTPUT                               │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │                   GLM-4-Voice                           │   │
+│  │                   TTS (not configured)                           │   │
 │  │            Text-to-Speech (Natural voice)               │   │
 │  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.2 Z.AI API Endpoints
+### 6.2 Chutes.ai API Endpoints
 
 | Capability | Endpoint | Method |
 |------------|----------|--------|
@@ -207,15 +207,15 @@
 
 ```
 1. [Audio Capture] → WebM audio blob
-2. [GLM-ASR-2512] → "Where can I get good sushi nearby that's open now?"
+2. [ASR (not configured)] → "Where can I get good sushi nearby that's open now?"
 3. [Intent Router] → category: "sightseeing", skill: "SEE-001"
 4. [Sightseeing Agent]
    a. Extract entities: cuisine=sushi, distance=nearby, time=now
    b. Query RAG: local restaurant knowledge base
    c. Query OpenStreetMap: filter by distance, opening hours
-   d. GLM-4.7: Rank and compose response
+   d. Chutes LLM: Rank and compose response
 5. [Response] → "There are 3 great sushi places within 10 minutes walk..."
-6. [GLM-4-Voice] → Audio response
+6. [TTS (not configured)] → Audio response
 7. [Playback] → Guest hears recommendation
 ```
 
@@ -250,8 +250,8 @@
 ### 7.4 Localization
 | Requirement | Implementation |
 |-------------|----------------|
-| Input languages | 20+ (GLM-ASR native support) |
-| Output languages | 20+ (GLM-4-Voice) |
+| Input languages | 20+ (ASR native support) |
+| Output languages | 20+ (TTS (not configured)) |
 | Dialect support | Cantonese, regional variants |
 | Cultural adaptation | Location-specific responses |
 
@@ -262,8 +262,8 @@
 ### Week 1: Voice Foundation
 | Task | Deliverable |
 |------|-------------|
-| GLM-ASR integration | Speech-to-text working |
-| GLM-4.7 basic chat | Conversation working |
+| ASR integration | Speech-to-text working |
+| Chutes LLM basic chat | Conversation working |
 | Web UI | Hold-to-speak interface |
 | Vercel deployment | Live demo URL |
 
@@ -286,8 +286,8 @@
 ### Week 4: Media & Polish
 | Task | Deliverable |
 |------|-------------|
-| CogView-4 integration | Destination images |
-| CogVideoX integration | Tour video generation |
+| Image generation (not available) integration | Destination images |
+| Video generation (not available) integration | Tour video generation |
 | Multi-language testing | 5 languages validated |
 | Production hardening | Error handling, logging |
 
@@ -335,7 +335,7 @@
 | Canary Technologies | PMS integration | No voice |
 | Akia | SMS focus | Limited AI |
 | Duve | Guest journey | No multilingual voice |
-| **NomadAI** | Voice-first, 20+ languages, Z.AI stack | New entrant |
+| **NomadAI** | Voice-first, 20+ languages, Chutes.ai stack | New entrant |
 
 ### B. Glossary
 | Term | Definition |
@@ -347,10 +347,9 @@
 | WER | Word Error Rate |
 
 ### C. References
-- [GLM-ASR Documentation](https://docs.z.ai/guides/audio/glm-asr-2512)
-- [GLM-4.7 API Reference](https://docs.z.ai/api/glm-4)
-- [CogView-4 Image Generation](https://docs.z.ai/api/cogview)
-- [CogVideoX Video Generation](https://docs.z.ai/api/cogvideo)
+- Chutes.ai API reference (see provider docs)
+- ASR provider docs (TBD once selected)
+- Image/Video generation provider docs (TBD)
 
 ---
 

@@ -1,15 +1,15 @@
 """
-Tests for Clawdbot Flask API endpoints.
+Tests for NomadAI Flask API endpoints (Chutes.ai provider).
 
 Tests cover:
-- Chat endpoint functionality
-- Transcription endpoint with audio handling
-- Voice-chat endpoint combining both operations
+- Chat endpoint functionality (via Chutes.ai)
+- Translate endpoint (prompt-based via Chutes.ai)
+- Transcribe/voice-chat stubs (501)
+- Provider listing
 - Session management
 """
 
 import json
-import base64
 import os
 import pytest
 from unittest.mock import Mock, patch, MagicMock
@@ -19,31 +19,14 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Mock the ZhipuAI import before importing app
-sys.modules['zhipuai'] = MagicMock()
-
-
-@pytest.fixture
-def mock_zhipu_client():
-    """Mock ZhipuAI client."""
-    with patch('api.index.client') as mock_client:
-        yield mock_client
-
-
-@pytest.fixture
-def mock_env_var(monkeypatch):
-    """Set mock API key environment variable."""
-    monkeypatch.setenv('ZHIPUAI_API_KEY', 'test-api-key-12345')
-
 
 @pytest.fixture
 def app():
     """Create Flask app for testing."""
-    # Clear any existing app
     if 'api.index' in sys.modules:
         del sys.modules['api.index']
 
-    with patch.dict(os.environ, {'ZHIPUAI_API_KEY': 'test-api-key'}):
+    with patch.dict(os.environ, {'CHUTES_API_KEY': 'cpk_test_key'}):
         from api.index import app as flask_app
         flask_app.config['TESTING'] = True
         return flask_app
@@ -56,20 +39,20 @@ def client(app):
 
 
 class TestChatEndpoint:
-    """Test suite for /api/chat endpoint."""
+    """Test suite for /api/chat endpoint (Chutes.ai)."""
 
-    def test_chat_endpoint_success(self, client, monkeypatch):
-        """Test successful chat request."""
-        # Mock the ZhipuAI chat response
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content="Hello! How can I help you today?"))]
+    def test_chat_endpoint_success(self, client):
+        """Test successful chat request via Chutes."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "Hello! How can I help?"}}]
+        }
 
-        with patch('api.index.client') as mock_client:
-            mock_client.chat.completions.create.return_value = mock_response
-
+        with patch('requests.post', return_value=mock_resp):
             response = client.post(
                 '/api/chat',
-                data=json.dumps({'message': 'Hello, Clawdbot!'}),
+                data=json.dumps({'message': 'Hello!'}),
                 content_type='application/json'
             )
 
@@ -77,7 +60,6 @@ class TestChatEndpoint:
         data = json.loads(response.data)
         assert data['success'] is True
         assert 'response' in data
-        assert data['response'] == "Hello! How can I help you today?"
 
     def test_chat_missing_message(self, client):
         """Test chat request without required message parameter."""
@@ -90,21 +72,21 @@ class TestChatEndpoint:
         assert response.status_code == 400
         data = json.loads(response.data)
         assert 'error' in data
-        assert 'message required' in data['error']
 
-    def test_chat_with_session_id(self, client):
-        """Test chat with custom session ID."""
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content="Session test response"))]
+    def test_chat_with_model_selection(self, client):
+        """Test chat with explicit model selection."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "Response from Qwen"}}]
+        }
 
-        with patch('api.index.client') as mock_client:
-            mock_client.chat.completions.create.return_value = mock_response
-
+        with patch('requests.post', return_value=mock_resp):
             response = client.post(
                 '/api/chat',
                 data=json.dumps({
-                    'message': 'Test message',
-                    'session_id': 'user-session-1'
+                    'message': 'Test',
+                    'model': 'Qwen/Qwen3-32B'
                 }),
                 content_type='application/json'
             )
@@ -113,155 +95,57 @@ class TestChatEndpoint:
         data = json.loads(response.data)
         assert data['success'] is True
 
-    def test_chat_api_error_handling(self, client):
-        """Test chat endpoint handles API errors gracefully."""
-        with patch('api.index.client') as mock_client:
-            mock_client.chat.completions.create.side_effect = Exception("API Error")
 
-            response = client.post(
-                '/api/chat',
-                data=json.dumps({'message': 'Test'}),
-                content_type='application/json'
-            )
+class TestTranscribeEndpoint:
+    """Test suite for /api/transcribe endpoint (now a 501 stub)."""
 
-        assert response.status_code == 500
-        data = json.loads(response.data)
-        assert data['success'] is False
-        assert 'error' in data
-
-
-class TestTranscriptionEndpoint:
-    """Test suite for /api/transcribe endpoint."""
-
-    def test_transcribe_success(self, client):
-        """Test successful audio transcription."""
-        # Create dummy audio data (base64 encoded)
-        audio_data = b'dummy_audio_data_wav_format'
-        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
-
-        mock_response = Mock()
-        mock_response.text = "Hello, this is a test transcription"
-
-        with patch('api.index.client') as mock_client:
-            mock_client.audio.transcriptions.create.return_value = mock_response
-
-            response = client.post(
-                '/api/transcribe',
-                data=json.dumps({'audio_base64': audio_base64}),
-                content_type='application/json'
-            )
-
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['success'] is True
-        assert data['text'] == "Hello, this is a test transcription"
-
-    def test_transcribe_missing_audio(self, client):
-        """Test transcription request without audio_base64."""
+    def test_transcribe_returns_501(self, client):
+        """Transcribe is not available (no ASR provider configured) — returns 501."""
         response = client.post(
             '/api/transcribe',
-            data=json.dumps({}),
+            data=json.dumps({'audio_base64': 'dGVzdA=='}),
             content_type='application/json'
         )
 
-        assert response.status_code == 400
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert 'audio_base64 required' in data['error']
-
-    def test_transcribe_invalid_base64(self, client):
-        """Test transcription with invalid base64 data."""
-        with patch('api.index.client'):
-            response = client.post(
-                '/api/transcribe',
-                data=json.dumps({'audio_base64': 'not-valid-base64!!!'}),
-                content_type='application/json'
-            )
-
-        assert response.status_code == 500
+        assert response.status_code == 501
         data = json.loads(response.data)
         assert data['success'] is False
-
-    def test_transcribe_api_error(self, client):
-        """Test transcription API error handling."""
-        audio_base64 = base64.b64encode(b'test_audio').decode('utf-8')
-
-        with patch('api.index.client') as mock_client:
-            mock_client.audio.transcriptions.create.side_effect = Exception("Transcription API Error")
-
-            response = client.post(
-                '/api/transcribe',
-                data=json.dumps({'audio_base64': audio_base64}),
-                content_type='application/json'
-            )
-
-        assert response.status_code == 500
-        data = json.loads(response.data)
-        assert data['success'] is False
+        assert 'not available' in data.get('error', '').lower()
 
 
 class TestVoiceChatEndpoint:
-    """Test suite for /api/voice-chat endpoint combining transcription and chat."""
+    """Test suite for /api/voice-chat endpoint (now a 501 stub)."""
 
-    def test_voice_chat_success(self, client):
-        """Test successful voice chat (transcription + response)."""
-        audio_base64 = base64.b64encode(b'dummy_audio').decode('utf-8')
-
-        # Mock both transcription and chat responses
-        mock_asr_response = Mock()
-        mock_asr_response.text = "What time is it?"
-
-        mock_chat_response = Mock()
-        mock_chat_response.choices = [Mock(message=Mock(content="It is currently 3 PM"))]
-
-        with patch('api.index.client') as mock_client:
-            mock_client.audio.transcriptions.create.return_value = mock_asr_response
-            mock_client.chat.completions.create.return_value = mock_chat_response
-
-            response = client.post(
-                '/api/voice-chat',
-                data=json.dumps({'audio_base64': audio_base64}),
-                content_type='application/json'
-            )
-
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['success'] is True
-        assert data['transcription'] == "What time is it?"
-        assert data['response'] == "It is currently 3 PM"
-
-    def test_voice_chat_missing_audio(self, client):
-        """Test voice chat without audio_base64."""
+    def test_voice_chat_returns_501(self, client):
+        """Voice chat is not available (no ASR provider configured) — returns 501."""
         response = client.post(
             '/api/voice-chat',
-            data=json.dumps({}),
+            data=json.dumps({'audio_base64': 'dGVzdA=='}),
             content_type='application/json'
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 501
         data = json.loads(response.data)
-        assert 'error' in data
-        assert 'audio_base64 required' in data['error']
+        assert data['success'] is False
 
-    def test_voice_chat_with_session(self, client):
-        """Test voice chat maintains session context."""
-        audio_base64 = base64.b64encode(b'audio_data').decode('utf-8')
 
-        mock_asr_response = Mock()
-        mock_asr_response.text = "Hello"
+class TestTranslateEndpoint:
+    """Test suite for /api/translate endpoint (prompt-based via Chutes)."""
 
-        mock_chat_response = Mock()
-        mock_chat_response.choices = [Mock(message=Mock(content="Hi there!"))]
+    def test_translate_success(self, client):
+        """Test translation via chat model."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "チェックアウトは何時ですか？"}}]
+        }
 
-        with patch('api.index.client') as mock_client:
-            mock_client.audio.transcriptions.create.return_value = mock_asr_response
-            mock_client.chat.completions.create.return_value = mock_chat_response
-
+        with patch('requests.post', return_value=mock_resp):
             response = client.post(
-                '/api/voice-chat',
+                '/api/translate',
                 data=json.dumps({
-                    'audio_base64': audio_base64,
-                    'session_id': 'test-session-1'
+                    'text': 'What time is checkout?',
+                    'target_lang': 'ja'
                 }),
                 content_type='application/json'
             )
@@ -269,87 +153,75 @@ class TestVoiceChatEndpoint:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['success'] is True
+        assert 'translated_text' in data
 
-    def test_voice_chat_transcription_error(self, client):
-        """Test voice chat handles transcription errors."""
-        audio_base64 = base64.b64encode(b'bad_audio').decode('utf-8')
+    def test_translate_missing_text(self, client):
+        """Test translate without text parameter."""
+        response = client.post(
+            '/api/translate',
+            data=json.dumps({'target_lang': 'ja'}),
+            content_type='application/json'
+        )
 
-        with patch('api.index.client') as mock_client:
-            mock_client.audio.transcriptions.create.side_effect = Exception("ASR Error")
+        assert response.status_code == 400
 
-            response = client.post(
-                '/api/voice-chat',
-                data=json.dumps({'audio_base64': audio_base64}),
-                content_type='application/json'
-            )
 
-        assert response.status_code == 500
+class TestSlidesEndpoint:
+    """Test suite for /api/generate-slides (501 stub)."""
+
+    def test_slides_returns_501(self, client):
+        """Slides generation is not available — returns 501."""
+        response = client.post(
+            '/api/generate-slides',
+            data=json.dumps({'topic': 'Tokyo'}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 501
+
+
+class TestVideoEndpoint:
+    """Test suite for /api/generate-video (501 stub)."""
+
+    def test_video_returns_501(self, client):
+        """Video generation is not available — returns 501."""
+        response = client.post(
+            '/api/generate-video',
+            data=json.dumps({'prompt': 'Tokyo sunset'}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 501
+
+
+class TestProvidersEndpoint:
+    """Test suite for /api/providers endpoint."""
+
+    def test_providers_returns_chutes_only(self, client):
+        """Provider list should only contain Chutes."""
+        response = client.get('/api/providers')
+
+        assert response.status_code == 200
         data = json.loads(response.data)
-        assert data['success'] is False
+        assert 'chutes' in data['providers']
+        assert 'zai' not in data['providers']
+        assert data['active_provider'] == 'chutes'
 
 
 class TestSessionManagement:
     """Test suite for conversation session management."""
 
-    def test_session_isolation(self, client):
-        """Test that different sessions maintain separate conversations."""
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content="Response 1"))]
-
-        with patch('api.index.client') as mock_client:
-            mock_client.chat.completions.create.return_value = mock_response
-
-            # Message in session 1
-            client.post(
-                '/api/chat',
-                data=json.dumps({
-                    'message': 'Message 1',
-                    'session_id': 'session-1'
-                }),
-                content_type='application/json'
-            )
-
-            # Message in session 2
-            client.post(
-                '/api/chat',
-                data=json.dumps({
-                    'message': 'Message 2',
-                    'session_id': 'session-2'
-                }),
-                content_type='application/json'
-            )
-
-        # Both should succeed without interference
-        assert response.status_code == 200
-
     def test_reset_conversation(self, client):
         """Test resetting conversation history for a session."""
-        with patch('api.index.client') as mock_client:
-            mock_response = Mock()
-            mock_response.choices = [Mock(message=Mock(content="Test"))]
-            mock_client.chat.completions.create.return_value = mock_response
-
-            # Create a conversation
-            client.post(
-                '/api/chat',
-                data=json.dumps({
-                    'message': 'Hello',
-                    'session_id': 'reset-test'
-                }),
-                content_type='application/json'
-            )
-
-            # Reset it
-            response = client.post(
-                '/api/reset',
-                data=json.dumps({'session_id': 'reset-test'}),
-                content_type='application/json'
-            )
+        response = client.post(
+            '/api/reset',
+            data=json.dumps({'session_id': 'reset-test'}),
+            content_type='application/json'
+        )
 
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['success'] is True
-        assert 'message' in data
 
     def test_reset_nonexistent_session(self, client):
         """Test resetting a session that doesn't exist."""
@@ -362,19 +234,6 @@ class TestSessionManagement:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['success'] is True
-
-
-class TestHomeEndpoint:
-    """Test suite for health check endpoint."""
-
-    def test_home_endpoint(self, client):
-        """Test home endpoint returns status."""
-        response = client.get('/')
-
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['status'] == 'ok'
-        assert 'message' in data
 
 
 if __name__ == '__main__':

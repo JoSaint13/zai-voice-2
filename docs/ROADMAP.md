@@ -41,7 +41,7 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 ## Phase 1: Foundation (Week 1-2) ✅ COMPLETE
 
 ### Objectives
-- Establish voice pipeline with Z.AI models
+- Establish voice pipeline with Chutes.ai models
 - Deploy working prototype to Vercel
 - Create skill system architecture
 
@@ -49,14 +49,14 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 
 | Task | Status | Owner | Notes |
 |------|--------|-------|-------|
-| GLM-ASR-2512 integration | ✅ Done | Dev | Speech-to-text working |
-| GLM-4.7 chat integration | ✅ Done | Dev | Conversation working |
+| ASR integration | ⚠️ Pending | Dev | Speech-to-text not yet configured |
+| Chutes.ai chat integration | ✅ Done | Dev | Conversation working |
 | Web UI with voice recording | ✅ Done | Dev | Hold-to-speak interface |
 | Vercel deployment | ✅ Done | Dev | Auto-deploy on push |
 | Skill system architecture | ✅ Done | Brain | BaseSkill, Registry, Context |
 | Concierge skill stubs | ✅ Done | Dev | 8 skills defined |
 | Sightseeing skill stubs | ✅ Done | Dev | 8 skills defined |
-| Media skill stubs | ✅ Done | Dev | CogView/CogVideo ready |
+| Media skill stubs | ⚠️ Pending | Dev | Image/video gen not available |
 | Test framework | ✅ Done | Runner | pytest + demo script |
 | Documentation | ✅ Done | Brain | PRD, Architecture, Guides |
 
@@ -71,7 +71,7 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 ## Phase 2: Skill Implementation (Week 3-4) ⏳ IN PROGRESS
 
 ### Objectives
-- Implement intent routing with GLM-4.7
+- Implement intent routing with Chutes.ai (DeepSeek/Qwen)
 - Build functional concierge and sightseeing skills
 - Integrate media generation
 
@@ -79,7 +79,7 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 
 | Task | Priority | Owner | Estimate |
 |------|----------|-------|----------|
-| Intent router with GLM-4.7 | P0 | Brain | 2 days |
+| Intent router with Chutes.ai model | P0 | Brain | 2 days |
 | Wire skills to API endpoints | P0 | Dev | 1 day |
 | Room service skill | P1 | Dev | 1 day |
 | Housekeeping skill | P1 | Dev | 1 day |
@@ -94,8 +94,8 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 | Local recommendations (RAG) | P1 | Dev | 2 days |
 | Itinerary planning | P2 | Dev | 1 day |
 | Directions (OpenStreetMap) | P2 | Dev | 1 day |
-| CogView-4 destination images | P2 | Dev | 1 day |
-| CogVideoX tour videos | P3 | Dev | 1 day |
+| Image generation (provider TBD) | P2 | Dev | 1 day |
+| Video generation (provider TBD) | P3 | Dev | 1 day |
 | Multi-language testing | P1 | Runner | 1 day |
 | Production hardening | P1 | Dev | 1 day |
 
@@ -242,7 +242,7 @@ Legend: ✅ Done  ⏳ In Progress  📋 Planned
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| Z.AI API outage | Low | High | Fallback responses, retry logic |
+| Chutes.ai API outage | Low | High | Fallback responses, retry logic |
 | PMS integration delays | Medium | Medium | Start early, have backup PMS |
 | WhatsApp approval denied | Medium | Medium | Focus on SMS first |
 | Low pilot hotel adoption | Medium | High | Offer free trial, hands-on support |

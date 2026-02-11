@@ -1,10 +1,6 @@
-transformers>=5.0.0
-torch>=2.0
-zhipuai>=2.0.0
-pyaudio
-soundfile
-numpy
 flask>=2.0.0
+flask-cors
 requests>=2.25.0
+python-dotenv
 pytest>=6.0.0
 pytest-mock>=3.0.0

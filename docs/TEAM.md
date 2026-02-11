@@ -366,7 +366,7 @@ Support            → Documentation, Triage
 ```
 You are the [ROLE] agent for NomadAI Voice Agent.
 
-Project: Hotel voice assistant using Z.AI (GLM-ASR, GLM-4.7)
+Project: Hotel voice assistant using Chutes.ai (DeepSeek/Qwen models)
 Your role: [SPECIFIC RESPONSIBILITIES]
 
 Key files:

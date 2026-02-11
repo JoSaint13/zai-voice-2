@@ -10,24 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Intent router with GLM-4.7 classification
+- Intent router with Chutes.ai classification
 - Functional concierge skills (room service, housekeeping)
 - Sightseeing skills with RAG
-- CogView-4 destination images
-- CogVideoX tour videos
+- Image generation (provider TBD)
+- Video generation (provider TBD)
 
 ---
 
 ## [0.1.0] - 2026-02-08
 
 ### Added
-- **Voice Pipeline**: GLM-ASR-2512 speech recognition with 20+ language support
-- **Conversation**: GLM-4.7 chat integration for intelligent responses
+- **Voice Pipeline**: ASR placeholder endpoints (speech-to-text not yet configured)
+- **Conversation**: Chutes.ai chat integration for intelligent responses
 - **Web UI**: Hold-to-speak interface with browser TTS
 - **Skill System**: BaseSkill, SkillRegistry, ConversationContext architecture
 - **Concierge Skills** (stubs): Room service, housekeeping, amenities, WiFi, check-out, complaints, wake-up, billing
 - **Sightseeing Skills** (stubs): Recommendations, itinerary, directions, events, booking, translation, image preview, video tour
-- **Media Skills** (stubs): CogView-4 image generation, CogVideoX video generation
+- **Media Skills** (stubs): Image/video generation placeholders
 - **API Endpoints**: `/api/transcribe`, `/api/chat`, `/api/voice-chat`, `/api/reset`
 - **Deployment**: Vercel configuration with auto-deploy
 - **Testing**: pytest framework, demo script, API tests
@@ -35,9 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Technical
 - Flask backend with session management
-- Z.AI SDK integration (zhipuai)
+- Chutes.ai HTTP integration
 - Mobile-responsive web interface
-- Multi-language input support via GLM-ASR
+- Multi-language input support (chat); ASR not yet configured
 
 ---
 

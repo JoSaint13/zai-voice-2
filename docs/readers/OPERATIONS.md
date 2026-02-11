@@ -44,7 +44,7 @@ vercel login
 vercel --prod
 
 # Set secrets
-vercel env add ZHIPUAI_API_KEY production
+vercel env add CHUTES_API_KEY production
 ```
 
 **Vercel Configuration (`vercel.json`):**
@@ -87,13 +87,13 @@ docker build -t nomadai:latest .
 
 # Run locally
 docker run -p 8080:8080 \
-  -e ZHIPUAI_API_KEY=$ZHIPUAI_API_KEY \
+  -e CHUTES_API_KEY=$CHUTES_API_KEY \
   nomadai:latest
 
 # Deploy to Cloud Run
 gcloud run deploy nomadai \
   --image gcr.io/PROJECT/nomadai \
-  --set-env-vars ZHIPUAI_API_KEY=$ZHIPUAI_API_KEY
+  --set-env-vars CHUTES_API_KEY=$CHUTES_API_KEY
 ```
 
 ### Option 3: Kubernetes
@@ -120,11 +120,11 @@ spec:
         ports:
         - containerPort: 8080
         env:
-        - name: ZHIPUAI_API_KEY
+        - name: CHUTES_API_KEY
           valueFrom:
             secretKeyRef:
               name: nomadai-secrets
-              key: zhipuai-api-key
+              key: chutes-api-key
         resources:
           requests:
             memory: "256Mi"
@@ -154,7 +154,7 @@ spec:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `ZHIPUAI_API_KEY` | Z.AI API authentication | `507b2d0b...` |
+| `CHUTES_API_KEY` | Chutes.ai API authentication | `cpk_...` |
 
 ### Optional Variables
 
@@ -170,20 +170,20 @@ spec:
 
 **Vercel:**
 ```bash
-vercel env add ZHIPUAI_API_KEY production
+vercel env add CHUTES_API_KEY production
 ```
 
 **AWS Secrets Manager:**
 ```bash
 aws secretsmanager create-secret \
   --name nomadai/production \
-  --secret-string '{"ZHIPUAI_API_KEY":"xxx"}'
+  --secret-string '{"CHUTES_API_KEY":"cpk_xxx"}'
 ```
 
 **Kubernetes:**
 ```bash
 kubectl create secret generic nomadai-secrets \
-  --from-literal=zhipuai-api-key=$ZHIPUAI_API_KEY
+  --from-literal=chutes-api-key=$CHUTES_API_KEY
 ```
 
 ---
@@ -221,7 +221,7 @@ readinessProbe:
 | `response_time_p99` | > 3s | 99th percentile latency |
 | `error_rate` | > 5% | HTTP 5xx rate |
 | `asr_accuracy` | < 90% | Transcription quality |
-| `api_quota_remaining` | < 10% | Z.AI API quota |
+| `api_quota_remaining` | < 10% | Chutes.ai API quota |
 | `active_sessions` | > 1000 | Concurrent users |
 
 ### Logging
@@ -311,7 +311,7 @@ spec:
 ### Recovery Procedures
 
 **Service Degradation:**
-1. Check Z.AI API status: https://status.z.ai
+1. Check Chutes.ai API status (provider status page)
 2. Enable fallback responses
 3. Notify affected users
 
@@ -366,8 +366,8 @@ spec:
 ```
 1. Check /api/health endpoint
 2. Review error logs: vercel logs --level error
-3. Check Z.AI API status
-4. If Z.AI down: enable fallback mode
+3. Check Chutes.ai API status
+4. If Chutes.ai down: enable fallback mode
 5. If app issue: rollback to previous deployment
 ```
 
@@ -376,7 +376,7 @@ spec:
 ```
 1. Check response_time_p99 metric
 2. Identify slow endpoint from logs
-3. Check Z.AI API latency
+3. Check Chutes.ai API latency
 4. Scale up if CPU > 70%
 5. Enable response caching if applicable
 ```
@@ -385,7 +385,7 @@ spec:
 
 ```
 1. Check api_quota_remaining metric
-2. Contact Z.AI for quota increase
+2. Contact Chutes.ai for quota increase
 3. Enable request queueing
 4. Prioritize critical requests
 ```
@@ -398,4 +398,4 @@ spec:
 |------|---------|
 | On-call | oncall@nomadai.com |
 | Engineering Lead | eng@nomadai.com |
-| Z.AI Support | support@z.ai |
+| Chutes.ai Support | support@chutes.ai (or provider portal) |

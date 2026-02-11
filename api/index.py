@@ -1,26 +1,19 @@
 """
 NomadAI Voice Agent API - Flask backend for Vercel
-Integrates GLM models with intelligent skill routing.
+Chutes.ai is the single AI provider (chat + tools).
 """
 
 import os
 import sys
 import json
-import base64
 import sqlite3
 import logging
-import tempfile
 import asyncio
 import traceback
 from typing import Dict, Any, List
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 import requests
-
-try:
-    from zhipuai import ZhipuAI
-except ImportError:
-    ZhipuAI = None
 
 # Load env vars
 load_dotenv()
@@ -33,13 +26,37 @@ logging.basicConfig(level=logging.INFO)
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'hotels.db')
 PUBLIC_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
 
-# Z.AI API config
-ZAI_BASE_URL = os.getenv('ZAI_BASE_URL', 'https://open.bigmodel.cn')
-ZAI_API_KEY = os.getenv('ZHIPUAI_API_KEY', '')
-ZAI_HEADERS = {
-    'Authorization': f'Bearer {ZAI_API_KEY}',
+# Chutes.ai API config (sole provider)
+CHUTES_API_KEY = os.getenv('CHUTES_API_KEY', '')
+CHUTES_HEADERS = {
+    'Authorization': f'Bearer {CHUTES_API_KEY}',
     'Content-Type': 'application/json'
 }
+
+# ── Provider Registry ──
+PROVIDERS = {
+    'chutes': {
+        'name': 'Chutes.ai',
+        'api_key': CHUTES_API_KEY,
+        'models': [
+            {'id': 'deepseek-ai/DeepSeek-V3-0324', 'slug': 'chutes-deepseek-ai-deepseek-v3-0324-tee', 'name': 'DeepSeek V3', 'desc': 'Strong open-source reasoning'},
+            {'id': 'deepseek-ai/DeepSeek-V3.1', 'slug': 'chutes-deepseek-ai-deepseek-v3-1-tee', 'name': 'DeepSeek V3.1', 'desc': 'Hybrid thinking/non-thinking'},
+            {'id': 'deepseek-ai/DeepSeek-V3.2', 'slug': 'chutes-deepseek-ai-deepseek-v3-2-tee', 'name': 'DeepSeek V3.2', 'desc': 'Efficient reasoning & agents'},
+            {'id': 'deepseek-ai/DeepSeek-R1-0528', 'slug': 'chutes-deepseek-ai-deepseek-r1-0528-tee', 'name': 'DeepSeek R1', 'desc': 'Deep reasoning (long CoT)'},
+            {'id': 'Qwen/Qwen3-32B', 'slug': 'chutes-qwen-qwen3-32b', 'name': 'Qwen3 32B', 'desc': 'Reasoning, coding, multilingual'},
+            {'id': 'Qwen/Qwen3-235B-A22B-Instruct-2507', 'slug': 'chutes-qwen-qwen3-235b-a22b-instruct-2507-tee', 'name': 'Qwen3 235B', 'desc': 'Top-tier MoE instruct'},
+            {'id': 'NousResearch/Hermes-4-70B', 'slug': 'chutes-nousresearch-hermes-4-70b', 'name': 'Hermes 4 70B', 'desc': 'Steerable reasoning model'},
+            {'id': 'chutesai/Mistral-Small-3.1-24B-Instruct-2503', 'slug': 'chutes-chutesai-mistral-small-3-1-24b-instruct-2503', 'name': 'Mistral Small 3.1', 'desc': 'Fast, vision, function calling'},
+            {'id': 'openai/gpt-oss-120b', 'slug': 'chutes-openai-gpt-oss-120b-tee', 'name': 'GPT-OSS 120B', 'desc': 'Open-source 120B'},
+        ],
+        'default_model': 'deepseek-ai/DeepSeek-V3-0324',
+        'auth_type': 'bearer',  # simple Bearer token
+    },
+}
+
+# Active provider state (in production, per-session via DB/Redis)
+active_provider = 'chutes'
+active_model = PROVIDERS[active_provider]['default_model']
 
 # Add src to path for skill imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -62,15 +79,6 @@ from src.skills.media import (
 )
 
 app = Flask(__name__)
-
-# Initialize ZhipuAI client
-# Initialize ZhipuAI client (optional - app runs in demo mode without it)
-ZHIPU_API_KEY = os.getenv("ZHIPUAI_API_KEY")
-if ZHIPU_API_KEY and ZhipuAI:
-    client = ZhipuAI(api_key=ZHIPU_API_KEY)
-else:
-    client = None
-    logger.warning("ZhipuAI client not initialized - running in demo mode")
 
 # Initialize skills
 SKILLS = get_all_skills()
@@ -176,6 +184,61 @@ def generate_demo_response(user_message, hotel_info=None, recommendations=None):
     return f"Thank you for your question. In demo mode, I can help with common queries about breakfast times, WiFi, checkout, and local recommendations. [Demo Mode]"
 
 
+def provider_chat(messages, provider_id=None, model_id=None, temperature=0.7, max_tokens=1024):
+    """
+    Chat completion via Chutes.ai. Returns the assistant message text.
+    Raises on error.
+    """
+    global active_provider, active_model
+    pid = provider_id or active_provider
+    mid = model_id or active_model
+    prov = PROVIDERS.get(pid)
+
+    if not prov:
+        raise ValueError(f"Unknown provider: {pid}")
+    if not prov['api_key']:
+        raise ValueError(f"No API key configured for {prov['name']}")
+
+    # Find slug for this model
+    model_entry = next((m for m in prov['models'] if m['id'] == mid), None)
+    if not model_entry or 'slug' not in model_entry:
+        raise ValueError(f"No chute slug configured for model {mid}")
+    url = f"https://{model_entry['slug']}.chutes.ai/v1/chat/completions"
+
+    headers = {'Authorization': f'Bearer {prov["api_key"]}', 'Content-Type': 'application/json'}
+
+    payload = {
+        'model': mid,
+        'messages': messages,
+        'temperature': temperature,
+        'max_tokens': max_tokens,
+    }
+
+    logger.info(f"[provider_chat] {prov['name']} / {mid} — {len(messages)} msgs")
+
+    r = requests.post(url, headers=headers, json=payload, timeout=(5, 60))
+
+    if r.status_code != 200:
+        try:
+            body = r.json()
+            code = body.get("error", {}).get("code", "")
+            msg = body.get("error", {}).get("message", r.text[:200])
+        except Exception:
+            code = str(r.status_code)
+            msg = r.text[:200]
+        raise RuntimeError(f"[{prov['name']}] HTTP {r.status_code} — {code}: {msg}")
+
+    data = r.json()
+    msg_obj = data['choices'][0]['message']
+    content = msg_obj.get('content') or msg_obj.get('reasoning_content') or ''
+
+    # Strip <think>...</think> blocks from reasoning models (DeepSeek R1, Qwen thinking, etc.)
+    import re
+    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+
+    return content
+
+
 # Default hotel config (used when no DB is available)
 DEFAULT_HOTELS = {
     "2ada3c2b-b208-4599-9c46-f32dc16ff950": {
@@ -214,6 +277,66 @@ def get_hotel(hotel_id):
     })
 
 
+@app.route("/api/providers", methods=["GET"])
+def list_providers():
+    """List available AI providers and their models."""
+    global active_provider, active_model
+    result = {}
+    for pid, prov in PROVIDERS.items():
+        result[pid] = {
+            'name': prov['name'],
+            'configured': bool(prov['api_key']),
+            'models': prov['models'],
+            'default_model': prov['default_model'],
+        }
+    return jsonify({
+        'providers': result,
+        'active_provider': active_provider,
+        'active_model': active_model,
+    })
+
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    """Simple health check."""
+    return jsonify({
+        "status": "ok",
+        "active_provider": active_provider,
+        "active_model": active_model,
+        "provider_configured": bool(PROVIDERS.get(active_provider, {}).get("api_key"))
+    })
+
+
+@app.route("/api/providers/switch", methods=["POST"])
+def switch_provider():
+    """Switch active provider and/or model."""
+    global active_provider, active_model
+    data = request.get_json() or {}
+
+    new_provider = data.get('provider', active_provider)
+    new_model = data.get('model')
+
+    if new_provider not in PROVIDERS:
+        return jsonify({'error': f'Unknown provider: {new_provider}'}), 400
+
+    prov = PROVIDERS[new_provider]
+    if not prov['api_key']:
+        return jsonify({'error': f'No API key configured for {prov["name"]}'}), 400
+
+    active_provider = new_provider
+    if new_model:
+        active_model = new_model
+    else:
+        active_model = prov['default_model']
+
+    logger.info(f"Switched to provider={active_provider}, model={active_model}")
+    return jsonify({
+        'active_provider': active_provider,
+        'active_model': active_model,
+        'provider_name': prov['name'],
+    })
+
+
 @app.route("/api/logs", methods=["POST"])
 def client_logs():
     """Receive logs from the frontend."""
@@ -240,7 +363,7 @@ def client_logs():
 
 def route_intent(transcription: str) -> Dict[str, Any]:
     """
-    Route user utterance to the appropriate skill using GLM-4.7.
+    Route user utterance to the appropriate skill using the active Chutes LLM.
 
     Args:
         transcription: The user's transcribed speech
@@ -272,13 +395,13 @@ def route_intent(transcription: str) -> Dict[str, Any]:
         }
     ]
 
-    response = client.chat.completions.create(
-        model="glm-4.7",
-        messages=messages,
-        temperature=0.1  # Low temperature for consistent classification
-    )
-
-    skill_name = response.choices[0].message.content.strip().lower()
+    # Use provider_chat for intent routing
+    try:
+        result_text = provider_chat(messages, temperature=0.1, max_tokens=50)
+        skill_name = result_text.strip().lower()
+    except Exception as e:
+        logger.warning(f"Intent routing failed, falling back to general_chat: {e}")
+        skill_name = "general_chat"
 
     # Find matching skill
     for skill in SKILLS:
@@ -298,177 +421,84 @@ def route_intent(transcription: str) -> Dict[str, Any]:
 
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({
-        "status": "ok",
-        "message": "NomadAI Voice Agent API is running",
-        "skills": [skill.name for skill in SKILLS]
-    })
+    return send_from_directory(PUBLIC_DIR, "index.html")
 
 
 @app.route("/api/ping", methods=["GET"])
 def ping():
-    """Test API connectivity to ZhipuAI via raw HTTP (no SDK retries)."""
+    """Test API connectivity to Chutes.ai provider."""
     import time
-    import jwt
 
-    results = {"api_key": "configured" if ZHIPU_API_KEY else "missing", "tests": []}
+    results = {
+        "active_provider": active_provider,
+        "active_model": active_model,
+        "providers": {}
+    }
 
-    if not ZAI_API_KEY:
-        results["tests"].append({"model": "all", "status": "skip", "detail": "No API key configured"})
-        return jsonify(results)
+    # ── Test Chutes.ai ──
+    chutes_results = {"api_key": "configured" if CHUTES_API_KEY else "missing", "tests": []}
 
-    # Generate JWT token (same way ZhipuAI SDK does it)
-    def make_token(api_key):
-        parts = api_key.split(".")
-        if len(parts) != 2:
-            return api_key  # fallback to raw key
-        kid, secret = parts
-        payload = {
-            "api_key": kid,
-            "exp": int(time.time()) + 300,
-            "timestamp": int(time.time() * 1000),
-        }
-        return jwt.encode(payload, secret, algorithm="HS256", headers={"alg": "HS256", "sign_type": "SIGN"})
+    if CHUTES_API_KEY:
+        chutes_headers = {"Authorization": f"Bearer {CHUTES_API_KEY}", "Content-Type": "application/json"}
 
-    try:
-        token = make_token(ZAI_API_KEY)
-    except Exception as e:
-        results["tests"].append({"model": "auth", "status": "error", "detail": f"JWT generation failed: {e}"})
-        return jsonify(results)
+        # Test a few models (using per-chute slug URLs)
+        chutes_test_models = [
+            {"model": "deepseek-ai/DeepSeek-V3-0324", "slug": "chutes-deepseek-ai-deepseek-v3-0324-tee"},
+            {"model": "Qwen/Qwen3-32B", "slug": "chutes-qwen-qwen3-32b"},
+        ]
+        for tm in chutes_test_models:
+            model = tm["model"]
+            slug = tm["slug"]
+            t0 = time.time()
+            try:
+                r = requests.post(
+                    f"https://{slug}.chutes.ai/v1/chat/completions",
+                    headers=chutes_headers,
+                    json={"model": model, "messages": [{"role": "user", "content": "Reply: pong"}], "max_tokens": 20},
+                    timeout=(5, 15),
+                )
+                ms = int((time.time() - t0) * 1000)
+                if r.status_code == 200:
+                    data = r.json()
+                    msg_obj = data["choices"][0]["message"]
+                    reply = msg_obj.get("content") or msg_obj.get("reasoning_content") or ""
+                    reply = reply[:50]
+                    # Strip thinking tags from reply
+                    import re as _re
+                    reply = _re.sub(r'<think>.*?</think>', '', reply, flags=_re.DOTALL).strip()
+                    chutes_results["tests"].append({
+                        "model": model, "status": "ok",
+                        "reply": reply,
+                        "latency_ms": ms,
+                    })
+                else:
+                    try:
+                        msg = r.json().get("detail", r.text[:150])
+                    except Exception:
+                        msg = r.text[:150]
+                    chutes_results["tests"].append({"model": model, "status": "error", "detail": str(msg)[:200], "http": r.status_code, "latency_ms": ms})
+            except requests.Timeout:
+                ms = int((time.time() - t0) * 1000)
+                chutes_results["tests"].append({"model": model, "status": "error", "detail": "Timeout", "latency_ms": ms})
+            except Exception as e:
+                ms = int((time.time() - t0) * 1000)
+                chutes_results["tests"].append({"model": model, "status": "error", "detail": str(e)[:200], "latency_ms": ms})
+    else:
+        chutes_results["tests"].append({"model": "all", "status": "skip", "detail": "No API key"})
 
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-    # Quick connectivity check first
-    t0 = time.time()
-    try:
-        r = requests.get(f"{ZAI_BASE_URL}", timeout=(3, 5))
-        ms = int((time.time() - t0) * 1000)
-        results["network"] = {"status": "ok", "latency_ms": ms, "base_url": ZAI_BASE_URL}
-    except requests.Timeout:
-        ms = int((time.time() - t0) * 1000)
-        results["network"] = {"status": "timeout", "latency_ms": ms, "base_url": ZAI_BASE_URL,
-                              "detail": "Cannot reach API server. If outside China, this API may be geo-blocked."}
-        return jsonify(results)
-    except Exception as e:
-        ms = int((time.time() - t0) * 1000)
-        results["network"] = {"status": "error", "latency_ms": ms, "detail": str(e)[:200]}
-        return jsonify(results)
-
-    # Test chat models via raw HTTP (NO sdk retries)
-    models = ["glm-4-plus", "glm-4.7", "glm-4-flash"]
-    for model in models:
-        t0 = time.time()
-        try:
-            r = requests.post(
-                f"{ZAI_BASE_URL}/api/paas/v4/chat/completions",
-                headers=headers,
-                json={"model": model, "messages": [{"role": "user", "content": "Reply: pong"}], "max_tokens": 5},
-                timeout=(3, 8),
-            )
-            ms = int((time.time() - t0) * 1000)
-            if r.status_code == 200:
-                data = r.json()
-                results["tests"].append({
-                    "model": model, "status": "ok",
-                    "reply": data["choices"][0]["message"]["content"],
-                    "tokens": data.get("usage", {}).get("total_tokens"),
-                    "latency_ms": ms,
-                })
-            else:
-                try:
-                    body = r.json()
-                    code = body.get("error", {}).get("code", "")
-                    msg = body.get("error", {}).get("message", "")
-                except Exception:
-                    code = str(r.status_code)
-                    msg = r.text[:150]
-                results["tests"].append({
-                    "model": model, "status": "error",
-                    "code": code, "detail": msg,
-                    "http": r.status_code, "latency_ms": ms,
-                })
-        except requests.Timeout:
-            ms = int((time.time() - t0) * 1000)
-            results["tests"].append({"model": model, "status": "error", "detail": "Timeout (>10s)", "latency_ms": ms})
-        except Exception as e:
-            ms = int((time.time() - t0) * 1000)
-            results["tests"].append({"model": model, "status": "error", "detail": str(e)[:200], "latency_ms": ms})
-
-    # Test ASR endpoint
-    t0 = time.time()
-    try:
-        r = requests.post(
-            f"{ZAI_BASE_URL}/api/paas/v4/audio/transcriptions",
-            headers={"Authorization": f"Bearer {token}"},
-            data={"model": "glm-asr-2512", "stream": "false"},
-            files={"file": ("test.wav", b"\x00" * 100, "audio/wav")},
-            timeout=(3, 8),
-        )
-        ms = int((time.time() - t0) * 1000)
-        results["tests"].append({
-            "model": "glm-asr-2512",
-            "status": "ok" if r.status_code in (200, 400) else "error",
-            "http": r.status_code,
-            "detail": "reachable" if r.status_code in (200, 400) else r.text[:150],
-            "latency_ms": ms,
-        })
-    except Exception as e:
-        ms = int((time.time() - t0) * 1000)
-        results["tests"].append({"model": "glm-asr-2512", "status": "error", "detail": str(e)[:200], "latency_ms": ms})
+    results["providers"]["chutes"] = chutes_results
 
     return jsonify(results)
 
 
 @app.route("/api/transcribe", methods=["POST"])
 def transcribe():
-    """Transcribe audio using GLM-ASR-2512 via Z.AI API."""
-    try:
-        data = request.get_json()
-
-        if "audio_base64" not in data:
-            return jsonify({"error": "audio_base64 required"}), 400
-
-        # Decode base64 audio
-        audio_bytes = base64.b64decode(data["audio_base64"])
-
-        # Save to temp file
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(audio_bytes)
-            temp_path = f.name
-
-        # Transcribe with GLM-ASR-2512 using Z.AI API
-        with open(temp_path, "rb") as audio_file:
-            files = {"file": audio_file}
-            form_data = {"model": "glm-asr-2512", "stream": "false"}
-            
-            response = requests.post(
-                f"{ZAI_BASE_URL}/paas/v4/audio/transcriptions",
-                headers={"Authorization": f"Bearer {ZAI_API_KEY}"},
-                data=form_data,
-                files=files,
-                timeout=30.0
-            )
-
-        # Clean up
-        os.unlink(temp_path)
-
-        if response.status_code == 200:
-            result = response.json()
-            return jsonify({
-                "text": result.get("text", ""),
-                "success": True
-            })
-        else:
-            return jsonify({
-                "error": f"API error: {response.status_code}",
-                "success": False
-            }), response.status_code
-
-    except Exception as e:
-        error_msg = get_user_friendly_error(e)
-        print(f"Error in /api/transcribe: {str(e)}")
-        traceback.print_exc()
-        return jsonify({"error": error_msg, "success": False}), 500
+    """Transcribe audio — currently not available (no ASR provider)."""
+    return jsonify({
+        "error": "Speech-to-text is not currently available (ASR provider not available). Please use the Chat tab to type your message.",
+        "success": False,
+        "reason": "no_asr_provider"
+    }), 501
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -531,12 +561,14 @@ def chat():
                 "content": user_message
             })
 
-            response = client.chat.completions.create(
-                model="glm-4.7",
-                messages=conversations[session_id]
+            # Use provider_chat (Chutes-only)
+            provider_id = data.get("provider")
+            model_id = data.get("model")
+            assistant_message = provider_chat(
+                conversations[session_id],
+                provider_id=provider_id,
+                model_id=model_id,
             )
-
-            assistant_message = response.choices[0].message.content
 
             conversations[session_id].append({
                 "role": "assistant",
@@ -546,6 +578,8 @@ def chat():
             return jsonify({
                 "response": assistant_message,
                 "skill_used": "general_chat",
+                "provider": provider_id or active_provider,
+                "model": model_id or active_model,
                 "success": True
             })
 
@@ -575,141 +609,12 @@ def chat():
 
 @app.route("/api/voice-chat", methods=["POST"])
 def voice_chat():
-    """Complete voice chat: transcribe + route + respond with skills."""
-    try:
-        data = request.get_json()
-
-        if "audio_base64" not in data:
-            return jsonify({"error": "audio_base64 required"}), 400
-
-        session_id = data.get("session_id", "default")
-
-        # Step 1: Transcribe with GLM-ASR-2512
-        audio_bytes = base64.b64decode(data["audio_base64"])
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(audio_bytes)
-            temp_path = f.name
-
-        with open(temp_path, "rb") as audio_file:
-            files = {"file": audio_file}
-            form_data = {"model": "glm-asr-2512", "stream": "false"}
-            
-            asr_response = requests.post(
-                f"{ZAI_BASE_URL}/paas/v4/audio/transcriptions",
-                headers={"Authorization": f"Bearer {ZAI_API_KEY}"},
-                data=form_data,
-                files=files,
-                timeout=30.0
-            )
-
-        os.unlink(temp_path)
-        
-        if asr_response.status_code != 200:
-            return jsonify({"error": "Transcription failed", "success": False}), 500
-            
-        transcription = asr_response.json().get("text", "")
-
-        # Step 2: Route to appropriate skill
-        intent_result = route_intent(transcription)
-
-        # Step 3: Execute skill or fallback to general chat
-        if intent_result["matched"] and intent_result["skill"]:
-            # Execute the matched skill
-            skill = intent_result["skill"]
-
-            # Build context for skill execution
-            context = {
-                "transcription": transcription,
-                "session_id": session_id,
-                "location": "Tokyo",  # In production, get from user profile
-                "hotel_location": "Shibuya Grand Hotel",
-            }
-
-            # Run async skill execution in sync context
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            skill_result = loop.run_until_complete(skill.execute(context))
-            loop.close()
-
-            assistant_message = skill_result["response"]
-
-            # Save to conversation history
-            if session_id not in conversations:
-                conversations[session_id] = []
-
-            conversations[session_id].append({
-                "role": "user",
-                "content": transcription
-            })
-            conversations[session_id].append({
-                "role": "assistant",
-                "content": assistant_message
-            })
-
-            return jsonify({
-                "transcription": transcription,
-                "response": assistant_message,
-                "skill_used": intent_result["skill_name"],
-                "action": skill_result.get("action"),
-                "metadata": skill_result.get("metadata", {}),
-                "image_url": skill_result.get("image_url"),
-                "video_task_id": skill_result.get("task_id"),
-                "success": True
-            })
-
-        else:
-            # Fallback to general chat
-            if session_id not in conversations:
-                conversations[session_id] = [{
-                    "role": "system",
-                    "content": """You are NomadAI, a helpful hotel voice assistant.
-                    Keep responses concise (2-3 sentences) since they will be spoken aloud.
-                    Be friendly, helpful, and conversational."""
-                }]
-
-            conversations[session_id].append({
-                "role": "user",
-                "content": transcription
-            })
-
-            chat_response = client.chat.completions.create(
-                model="glm-4.7",
-                messages=conversations[session_id]
-            )
-
-            assistant_message = chat_response.choices[0].message.content
-
-            conversations[session_id].append({
-                "role": "assistant",
-                "content": assistant_message
-            })
-
-            return jsonify({
-                "transcription": transcription,
-                "response": assistant_message,
-                "skill_used": "general_chat",
-                "success": True
-            })
-
-    except Exception as e:
-        error_msg = get_user_friendly_error(e)
-        print(f"Error in /api/voice-chat: {str(e)}")
-        traceback.print_exc()
-        
-        # Fallback to demo mode if API unavailable but we have transcription
-        if 'quota' in error_msg.lower() or 'rate' in str(e).lower() or '1113' in str(e):
-            # If we got a transcription before the error, use demo mode
-            if 'transcription' in dir() and transcription:
-                demo_response = generate_demo_response(transcription)
-                return jsonify({
-                    "transcription": transcription,
-                    "response": demo_response,
-                    "skill_used": "demo_mode",
-                    "success": True
-                })
-        
-        return jsonify({"error": error_msg, "success": False}), 500
+    """Voice chat — currently not available (no ASR provider)."""
+    return jsonify({
+        "error": "Voice chat requires speech-to-text which is not currently available (ASR provider not available). Please use the Chat tab to type your message.",
+        "success": False,
+        "reason": "no_asr_provider"
+    }), 501
 def video_status(task_id):
     """Check video generation status."""
     try:
@@ -746,7 +651,7 @@ def reset():
 
 @app.route("/api/translate", methods=["POST"])
 def translate():
-    """Translate text using Z.AI Translation Agent API."""
+    """Translate text using Chutes.ai chat model."""
     try:
         data = request.get_json()
         
@@ -755,77 +660,54 @@ def translate():
         
         text = data["text"]
         source_lang = data.get("source_lang", "auto")
-        target_lang = data.get("target_lang", "en")  # Use language codes
+        target_lang = data.get("target_lang", "en")
         strategy = data.get("strategy", "general")
         
-        # Map frontend language names to Z.AI language codes
+        # Map frontend language names to full names for the prompt
         lang_map = {
-            "auto": "auto",
-            "Auto-detect": "auto",
-            "English": "en",
-            "Chinese": "zh-CN",
-            "Spanish": "es",
-            "French": "fr",
-            "German": "de",
-            "Japanese": "ja",
-            "Korean": "ko"
+            "auto": "auto-detect",
+            "Auto-detect": "auto-detect",
+            "en": "English",
+            "zh-CN": "Chinese (Simplified)",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "English": "English",
+            "Chinese": "Chinese (Simplified)",
+            "Spanish": "Spanish",
+            "French": "French",
+            "German": "German",
+            "Japanese": "Japanese",
+            "Korean": "Korean",
         }
         
-        source_lang_code = lang_map.get(source_lang, source_lang)
-        target_lang_code = lang_map.get(target_lang, target_lang)
+        source_name = lang_map.get(source_lang, source_lang)
+        target_name = lang_map.get(target_lang, target_lang)
         
-        # Use Z.AI Translation Agent API
-        payload = {
-            "agent_id": "general_translation",
-            "messages": [{
-                "role": "user",
-                "content": [{"type": "text", "text": text}]
-            }],
-            "stream": False,
-            "custom_variables": {
-                "source_lang": source_lang_code,
-                "target_lang": target_lang_code,
-                "strategy": strategy
-            }
-        }
+        source_instruction = f"from {source_name}" if source_name != "auto-detect" else "(auto-detect the source language)"
         
-        response = requests.post(
-            f"{ZAI_BASE_URL}/v1/agents",
-            headers=ZAI_HEADERS,
-            json=payload,
-            timeout=30.0
-        )
+        messages = [
+            {
+                "role": "system",
+                "content": f"You are a professional translator. Translate the following text {source_instruction} to {target_name}. "
+                           f"Translation strategy: {strategy}. "
+                           "Output ONLY the translated text, nothing else — no explanations, no quotes, no labels."
+            },
+            {"role": "user", "content": text}
+        ]
         
-        if response.status_code == 200:
-            result = response.json()
-            
-            # Check if response has the expected structure
-            if "choices" in result and len(result["choices"]) > 0:
-                translation = result["choices"][0]["messages"][0]["content"]["text"]
-                
-                return jsonify({
-                    "translation": translation,
-                    "source_lang": source_lang,
-                    "target_lang": target_lang,
-                    "strategy": strategy,
-                    "success": True
-                })
-            else:
-                # Log the actual response for debugging
-                print(f"Unexpected translation response format: {result}")
-                return jsonify({
-                    "error": "Translation response format error",
-                    "success": False,
-                    "details": str(result)
-                }), 500
-        else:
-            error_text = response.text
-            print(f"Translation API error {response.status_code}: {error_text}")
-            return jsonify({
-                "error": f"Translation API error: {response.status_code}",
-                "success": False,
-                "details": error_text
-            }), response.status_code
+        translation = provider_chat(messages, temperature=0.3, max_tokens=2048)
+        
+        return jsonify({
+            "translation": translation,
+            "translated_text": translation,
+            "source_lang": source_lang,
+            "target_lang": target_lang,
+            "strategy": strategy,
+            "success": True
+        })
     
     except Exception as e:
         error_msg = get_user_friendly_error(e)
@@ -836,116 +718,22 @@ def translate():
 
 @app.route("/api/generate-slides", methods=["POST"])
 def generate_slides():
-    """Generate slides/presentation using Z.AI Slide Agent API."""
-    try:
-        data = request.get_json()
-        
-        if "topic" not in data:
-            return jsonify({"error": "topic required"}), 400
-        
-        topic = data["topic"]
-        num_slides = data.get("num_slides", 10)
-        
-        # Use Z.AI Slide/Poster Agent
-        payload = {
-            "agent_id": "glm_slide_poster_agent",
-            "messages": [{
-                "role": "user",
-                "content": [{"type": "text", "text": topic}]
-            }],
-            "stream": False,
-            "custom_variables": {
-                "create_type": "slide",
-                "num_slides": num_slides
-            }
-        }
-        
-        response = requests.post(
-            f"{ZAI_BASE_URL}/v1/agents",
-            headers=ZAI_HEADERS,
-            json=payload,
-            timeout=60.0  # Slides may take longer
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            slides_content = result["choices"][0]["messages"][0]["content"]["text"]
-            
-            return jsonify({
-                "slides": slides_content,
-                "topic": topic,
-                "num_slides": num_slides,
-                "success": True
-            })
-        else:
-            return jsonify({
-                "error": f"Slides API error: {response.status_code}",
-                "success": False
-            }), response.status_code
-    
-    except Exception as e:
-        error_msg = get_user_friendly_error(e)
-        print(f"Error in /api/generate-slides: {str(e)}")
-        traceback.print_exc()
-        return jsonify({"error": error_msg, "success": False}), 500
+    """Generate slides — currently not available with the current provider."""
+    return jsonify({
+        "error": "Slide generation is not currently available with the current provider.",
+        "success": False,
+        "reason": "no_slides_agent"
+    }), 501
 
 
 @app.route("/api/generate-video", methods=["POST"])
 def generate_video():
-    """Generate video effects using Z.AI Video Template Agent API."""
-    try:
-        data = request.get_json()
-        
-        if "image_base64" not in data:
-            return jsonify({"error": "image_base64 required"}), 400
-        
-        image_base64 = data["image_base64"]
-        template = data.get("template", "french_kiss")
-        
-        # Use Z.AI Video Template Agent
-        payload = {
-            "agent_id": "popular_special_effects_videos",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": f"Generate video with {template} template"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                ]
-            }],
-            "stream": False,
-            "custom_variables": {
-                "template": template
-            }
-        }
-        
-        response = requests.post(
-            f"{ZAI_BASE_URL}/v1/agents",
-            headers=ZAI_HEADERS,
-            json=payload,
-            timeout=90.0  # Video generation takes longer
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            video_url = result.get("video_url", "Processing...")
-            
-            return jsonify({
-                "video_url": video_url,
-                "template": template,
-                "status": "completed" if video_url != "Processing..." else "processing",
-                "success": True
-            })
-        else:
-            return jsonify({
-                "error": f"Video API error: {response.status_code}",
-                "success": False
-            }), response.status_code
-    
-    except Exception as e:
-        error_msg = get_user_friendly_error(e)
-        print(f"Error in /api/generate-video: {str(e)}")
-        traceback.print_exc()
-        return jsonify({"error": error_msg, "success": False}), 500
+    """Generate video — currently not available with the current provider."""
+    return jsonify({
+        "error": "Video generation is not currently available with the current provider.",
+        "success": False,
+        "reason": "no_video_agent"
+    }), 501
 
 
 # Serve static files (for local development; Vercel handles this via routes)
@@ -962,8 +750,8 @@ if __name__ == "__main__":
     import sys
     debug_mode = os.environ.get('FLASK_DEBUG', '1') == '1'
     print(f"📁 Serving static files from: {PUBLIC_DIR}")
-    print(f"🌐 Frontend: http://localhost:8000")
-    print(f"🌐 Features: http://localhost:8000/features")
-    print(f"📡 API Docs: http://localhost:8000/api/health")
+    print(f"🌐 Frontend: http://localhost:8088")
+    print(f"🌐 Features: http://localhost:8088/features")
+    print(f"📡 API Docs: http://localhost:8088/api/health")
     print(f"🔧 Debug mode: {'ON' if debug_mode else 'OFF'}")
-    app.run(debug=debug_mode, host='0.0.0.0', port=8000, use_reloader=debug_mode)
+    app.run(debug=debug_mode, host='0.0.0.0', port=8088, use_reloader=debug_mode)
