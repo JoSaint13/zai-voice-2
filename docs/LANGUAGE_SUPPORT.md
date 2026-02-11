@@ -11,15 +11,15 @@
 
 | Code | Language | STT Status | LLM Status | TTS Voice | Overall |
 |------|----------|------------|------------|-----------|---------|
-| `en` | English | ✅ Production | ✅ Production | `af_heart` | ✅ Production Ready |
-| `ru` | Russian | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
-| `zh` | Chinese (Mandarin) | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
-| `ja` | Japanese | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
-| `ko` | Korean | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
-| `es` | Spanish | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
-| `fr` | French | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
-| `de` | German | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
-| `ar` | Arabic | ⚠️ Testing | ⚠️ Testing | `af_heart` (fallback) | ⚠️ Validation Needed |
+| `en` | English | ✅ Validated (98%+) | ✅ Production | `af_heart` | ✅ Production Ready |
+| `ru` | Russian | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
+| `zh` | Chinese (Mandarin) | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
+| `ja` | Japanese | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
+| `ko` | Korean | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
+| `es` | Spanish | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
+| `fr` | French | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
+| `de` | German | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
+| `ar` | Arabic | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
 
 **Legend:**
 - ✅ **Production Ready** — Validated, performs well, recommended
@@ -131,13 +131,26 @@ The system automatically selects appropriate TTS voices based on detected langua
 
 ## Testing Checklist
 
-### Phase 1: STT Validation (⬜ Not Started)
+### Phase 1: TTS Voice Research (🔍 IN PROGRESS)
 
-For each language:
-- [ ] Generate or record 5-10 test audio samples
-- [ ] Test transcription via `/api/transcribe`
-- [ ] Calculate word error rate (WER) or subjective accuracy
-- [ ] Document results in this file
+**Finding:** Kokoro `af_heart` voice only supports English. Non-English text is either:
+- Pronounced phonetically as English
+- Rejected/synthesized incorrectly
+
+**Action Required:**
+- [ ] Research Kokoro API documentation for multi-language voice support
+- [ ] Test if Kokoro has ANY non-English voices available
+- [ ] If no native voices: document limitation, keep `af_heart` fallback for all languages
+
+### Phase 2: STT Validation (⏸️ BLOCKED)
+
+**Blocker:** Cannot generate non-English audio with current TTS (Kokoro af_heart)
+
+**Alternative approaches:**
+- [ ] Use pre-recorded audio samples from native speakers
+- [ ] Use Google TTS / Azure TTS to generate test audio (external service)
+- [ ] Skip automated testing, rely on manual user testing per language
+- [ ] Test STT with real user audio from production (post-launch)
 
 ### Phase 2: LLM Validation (⬜ Not Started)
 
@@ -169,10 +182,18 @@ For each language:
 
 | Issue | Impact | Workaround | Planned Fix |
 |-------|--------|------------|-------------|
+| **Kokoro TTS English-only** | **Critical** | **Text-only responses for non-EN** | **Research alternative TTS providers** |
 | MiMo responds in English | High | Retry with stronger prompt | Sprint 3.3 — Language enforcement |
-| No native TTS voices | Medium | Use af_heart for all | Sprint 3.2 — Voice validation |
-| Whisper accents vary | Low | Language hint in API call | Already implemented |
+| Whisper STT untested non-EN | Medium | Assume Whisper quality (industry standard) | Manual testing with real users |
 | Arabic RTL rendering | Low | Frontend CSS fix | Sprint 3.4 |
+
+**Critical Discovery (2026-02-11):** Kokoro's `af_heart` voice cannot synthesize non-English text properly. This blocks multi-language TTS functionality.
+
+**Immediate Impact:**
+- ❌ Russian, Chinese, Japanese, Korean, Spanish, French, German, Arabic TTS **non-functional**
+- ✅ English TTS works perfectly
+- ✅ STT (Whisper) likely supports all languages (industry-proven)
+- ✅ LLM (MiMo) can respond in all languages (needs validation)
 
 ---
 
