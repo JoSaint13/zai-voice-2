@@ -1352,8 +1352,7 @@ def serve_static(filename):
     return send_from_directory(PUBLIC_DIR, filename)
 
 
-# Export for Vercel
-handler = app
+# Vercel detects `app` as WSGI automatically — do NOT set `handler`
 
 if __name__ == "__main__":
     import sys
