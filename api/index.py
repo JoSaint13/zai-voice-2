@@ -10,7 +10,9 @@ import sqlite3
 import logging
 import asyncio
 import traceback
-from typing import Dict, Any, List
+import time
+import functools
+from typing import Dict, Any, List, Callable
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 import requests
@@ -58,6 +60,44 @@ BRAIN_LLM_ENDPOINT = os.getenv("BRAIN_LLM_ENDPOINT", "https://llm.chutes.ai/v1/c
 VOICE_LISTEN_LLM = CHUTES_STT_ENDPOINT or f"{CHUTES_BASE}/v1/audio/transcriptions"
 # 🔊 speech_llm — TTS (Kokoro)
 SPEECH_LLM = CHUTES_TTS_ENDPOINT
+
+# ── Timeouts ──
+TIMEOUT_STT = int(os.getenv("TIMEOUT_STT", "30"))  # seconds
+TIMEOUT_TTS = int(os.getenv("TIMEOUT_TTS", "15"))
+TIMEOUT_LLM = int(os.getenv("TIMEOUT_LLM", "60"))
+
+# ── Retry Configuration ──
+MAX_RETRIES_STT = 3
+MAX_RETRIES_TTS = 3
+MAX_RETRIES_LLM = 2
+RETRY_BACKOFF_BASE = 1.5  # exponential backoff multiplier
+
+
+def retry_with_backoff(max_retries: int, backoff_base: float = 1.5, exceptions=(Exception,)):
+    """
+    Retry decorator with exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        backoff_base: Exponential backoff multiplier (delay = backoff_base^attempt)
+        exceptions: Tuple of exceptions to catch and retry
+    """
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    if attempt >= max_retries:
+                        logger.error(f"{func.__name__} failed after {max_retries} retries: {e}")
+                        raise
+                    delay = backoff_base ** attempt
+                    logger.warning(f"{func.__name__} attempt {attempt + 1} failed: {e}. Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+            return None  # Should never reach here
+        return wrapper
+    return decorator
 
 
 # ChutesHTTPError: use a factory to avoid module-level class (Vercel runtime compat)
@@ -199,8 +239,9 @@ def chutes_post_json(path: str, payload: dict, stream: bool = False):
     return r
 
 
+@retry_with_backoff(max_retries=MAX_RETRIES_STT, exceptions=(requests.exceptions.RequestException, RuntimeError))
 def call_chutes_stt(audio_base64: str, language: str | None = None) -> str:
-    """Call Chutes STT (Whisper v3). Returns transcription string."""
+    """Call Chutes STT (Whisper v3). Returns transcription string. Retries on failure."""
     # If direct chute endpoint provided, use it (expects audio_b64)
     if CHUTES_STT_ENDPOINT:
         payload = {
@@ -214,7 +255,7 @@ def call_chutes_stt(audio_base64: str, language: str | None = None) -> str:
             "Content-Type": "application/json",
         }
         logger.info(f"[stt] endpoint={CHUTES_STT_ENDPOINT} payload_keys={list(payload.keys())}")
-        r = requests.post(CHUTES_STT_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+        r = requests.post(CHUTES_STT_ENDPOINT, headers=headers, json=payload, timeout=(5, TIMEOUT_STT))
         if r.status_code != 200:
             try:
                 msg = r.json()
@@ -239,15 +280,16 @@ def call_chutes_stt(audio_base64: str, language: str | None = None) -> str:
     if language:
         payload["language"] = language
 
-    resp = chutes_post_json("/v1/audio/transcriptions", payload)
+    resp = chutes_post_json("/v1/audio/transcriptions", payload, timeout=(5, TIMEOUT_STT))
     data = resp.json()
     text = data.get("text") or data.get("transcription") or ""
     logger.info(f"[stt] model={CHUTES_STT_MODEL} lang={language or 'auto'} chars={len(text)}")
     return text
 
 
+@retry_with_backoff(max_retries=MAX_RETRIES_TTS, exceptions=(requests.exceptions.RequestException, RuntimeError))
 def call_chutes_tts(text: str, voice: str | None = None) -> str:
-    """Call Chutes TTS, return audio base64 (wav)."""
+    """Call Chutes TTS, return audio base64 (wav). Retries on failure."""
     # Kokoro voice IDs are like "af_heart", not model names
     if not voice or voice in ("kokoro", "csm-1b"):
         voice_model = "af_heart"
@@ -264,7 +306,7 @@ def call_chutes_tts(text: str, voice: str | None = None) -> str:
             "Content-Type": "application/json",
         }
         logger.info(f"[tts] endpoint={CHUTES_TTS_ENDPOINT} voice={voice_model} chars={len(text)}")
-        r = requests.post(CHUTES_TTS_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+        r = requests.post(CHUTES_TTS_ENDPOINT, headers=headers, json=payload, timeout=(5, TIMEOUT_TTS))
         if r.status_code != 200:
             try:
                 msg = r.json()
@@ -298,7 +340,7 @@ def call_chutes_tts(text: str, voice: str | None = None) -> str:
         "input": text,
         "format": "wav",
     }
-    resp = chutes_post_json("/v1/audio/speech", payload)
+    resp = chutes_post_json("/v1/audio/speech", payload, timeout=(5, TIMEOUT_TTS))
     data = resp.json()
     audio_b64 = data.get("audio") or data.get("audio_base64") or data.get("data")
     if not audio_b64:
@@ -402,9 +444,10 @@ def provider_chat(messages, provider_id=None, model_id=None, temperature=0.7, ma
     return content
 
 
+@retry_with_backoff(max_retries=MAX_RETRIES_LLM, exceptions=(requests.exceptions.RequestException, RuntimeError))
 def brain_chat(messages, temperature=0.7, max_tokens=1024):
     """
-    🧠 brain_llm — primary reasoning via MiMo-V2-Flash (or configured brain model).
+    🧠 brain_llm — primary reasoning via MiMo-V2-Flash (or configured brain model). Retries on failure.
     Uses dedicated endpoint, bypassing the slug-based provider registry.
     """
     import re
@@ -420,7 +463,7 @@ def brain_chat(messages, temperature=0.7, max_tokens=1024):
     }
     logger.info(f"[brain_chat] {BRAIN_LLM_MODEL} — msgs={len(messages)} temp={temperature} max_tokens={max_tokens}")
 
-    r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+    r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, TIMEOUT_LLM))
     if r.status_code != 200:
         try:
             body = r.json()
@@ -1133,7 +1176,7 @@ def chat_stream():
 
 @app.route("/api/voice-chat", methods=["POST"])
 def voice_chat():
-    """Voice chat: STT -> LLM -> TTS."""
+    """Voice chat: STT -> LLM -> TTS. Graceful fallbacks on failures."""
     try:
         data = request.get_json() or {}
         audio_b64 = data.get("audio_base64")
@@ -1147,8 +1190,15 @@ def voice_chat():
 
         logger.info(f"[voice] session={session_id} hotel={hotel_id} brain={BRAIN_LLM_MODEL} tts={tts_voice or CHUTES_TTS_MODEL}")
 
-        # 1) STT (voice_listen_llm)
-        transcription = call_chutes_stt(audio_b64, language=language)
+        # 1) STT (voice_listen_llm) — with fallback
+        try:
+            transcription = call_chutes_stt(audio_b64, language=language)
+        except Exception as e:
+            logger.error(f"[voice] STT failed after retries: {e}")
+            return jsonify({
+                "success": False,
+                "error": "Speech recognition failed. Please try again or type your message instead."
+            }), 503
 
         # 2) Agent loop (brain_llm) — with tool calling
         hotel_info = None
@@ -1159,7 +1209,7 @@ def voice_chat():
 
         assistant_message = agent_loop(transcription, session_id, hotel_info=hotel_info, language=language)
 
-        # 3) TTS (speech_llm) — stream by sentences if requested
+        # 3) TTS (speech_llm) — stream by sentences if requested, with fallback to text-only
         stream_mode = data.get("stream_tts", False)
 
         if stream_mode:
@@ -1171,13 +1221,15 @@ def voice_chat():
             def generate_voice_stream():
                 yield f"data: {json.dumps({'type': 'transcription', 'text': transcription})}\n\n"
                 yield f"data: {json.dumps({'type': 'response', 'text': assistant_message})}\n\n"
+                tts_failed_count = 0
                 for i, sentence in enumerate(sentences):
                     try:
                         chunk_audio = call_chutes_tts(sentence, voice=tts_voice)
                         yield f"data: {json.dumps({'type': 'audio_chunk', 'index': i, 'audio_base64': chunk_audio, 'text': sentence})}\n\n"
                     except Exception as e:
                         logger.error(f"[tts_stream] chunk {i} failed: {e}")
-                yield f"data: {json.dumps({'type': 'done', 'total_chunks': len(sentences)})}\n\n"
+                        tts_failed_count += 1
+                yield f"data: {json.dumps({'type': 'done', 'total_chunks': len(sentences), 'tts_failed': tts_failed_count})}\n\n"
 
             from flask import Response as FlaskResponse
             return FlaskResponse(generate_voice_stream(), headers={
@@ -1186,8 +1238,22 @@ def voice_chat():
                 "X-Accel-Buffering": "no",
             })
 
-        # Non-streaming: single TTS call
-        audio_reply_b64 = call_chutes_tts(assistant_message, voice=tts_voice)
+        # Non-streaming: single TTS call with fallback to text-only
+        try:
+            audio_reply_b64 = call_chutes_tts(assistant_message, voice=tts_voice)
+        except Exception as e:
+            logger.error(f"[voice] TTS failed after retries: {e}. Returning text-only response.")
+            # Graceful degradation: return text without audio
+            return jsonify({
+                "success": True,
+                "transcription": transcription,
+                "response": assistant_message,
+                "audio_base64": None,
+                "tts_failed": True,
+                "brain_llm": BRAIN_LLM_MODEL,
+                "hotel_id": hotel_id,
+                "session_id": session_id
+            })
 
         return jsonify({
             "success": True,
