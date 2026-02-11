@@ -213,12 +213,12 @@
         <p class="tagline">AI Hotel Concierge — Powered by Chutes.ai</p>
         <p class="hotel-name" id="hotelName">Loading...</p>
 
-        <!-- Provider & Model selector -->
-        <div class="provider-bar" id="providerBar">
+        <!-- Provider & Model selector (disabled — brain_llm is MiMo-V2-Flash) -->
+        <div class="provider-bar" id="providerBar" style="display:none;">
             <label>Provider:</label>
-            <select id="providerSelect"><option>Loading...</option></select>
+            <select id="providerSelect" disabled><option>Loading...</option></select>
             <label>Model:</label>
-            <select id="modelSelect"><option>Loading...</option></select>
+            <select id="modelSelect" disabled><option>Loading...</option></select>
             <span class="provider-badge" id="providerBadge">—</span>
         </div>
 
@@ -236,8 +236,8 @@
         <button class="tab active" data-panel="chat">💬 Chat</button>
         <button class="tab" data-panel="voice">🎤 Voice</button>
         <button class="tab" data-panel="translate">🌐 Translate</button>
-        <button class="tab" data-panel="slides">📊 Slides</button>
-        <button class="tab" data-panel="video">🎬 Video</button>
+        <button class="tab" data-panel="slides" style="display:none;">📊 Slides</button>
+        <button class="tab" data-panel="video" style="display:none;">🎬 Video</button>
         <button class="tab" data-panel="diag">🔧 Diagnostics</button>
     </div>
 
@@ -273,6 +273,13 @@
                 </div>
             </div>
             <div class="chat-controls">
+                <div class="field" style="margin-bottom:10px;">
+                    <label style="color:#aaa;font-size:.85rem;">Voice</label>
+                    <select id="voiceSelect">
+                        <option value="kokoro">Kokoro (быстрее)</option>
+                        <option value="csm-1b">CSM-1B (натуральнее)</option>
+                    </select>
+                </div>
                 <div class="voice-bar">
                     <button class="btn-mic idle" id="micBtn">
                         <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/></svg>
@@ -282,6 +289,29 @@
                 <div class="chat-footer">
                     <button class="btn-sm" id="voiceResetBtn">Reset</button>
                     <div class="status-text" id="voiceStatus">Ready — tap &amp; hold mic</div>
+                </div>
+                <div class="grid2" style="margin-top:10px;">
+                    <div class="field">
+                        <label style="color:#aaa;font-size:.85rem;">VAD Sensitivity (RMS)</label>
+                        <input type="range" id="vadThreshold" min="0.003" max="0.03" step="0.001" value="0.01">
+                        <div class="status-text" id="vadThresholdLabel">0.01</div>
+                    </div>
+                    <div class="field">
+                        <label style="color:#aaa;font-size:.85rem;">Auto-stop silence, sec</label>
+                        <input type="range" id="vadTimeout" min="0.5" max="3" step="0.1" value="1.5">
+                        <div class="status-text" id="vadTimeoutLabel">1.5s</div>
+                    </div>
+                </div>
+                <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+                    <label style="color:#aaa;font-size:.85rem;display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="wakeWordToggle"> 🎙️ Wake Word Detection
+                        <span id="wakeWordIndicator" style="width:8px;height:8px;border-radius:50%;background:#555;display:inline-block;"></span>
+                    </label>
+                    <div class="field" style="margin-top:6px;">
+                        <label style="color:#aaa;font-size:.75rem;">Trigger words (comma-separated)</label>
+                        <input type="text" id="wakeWordInput" value="hey nomad, nomad, привет номад" style="font-size:.85rem;padding:4px 8px;">
+                    </div>
+                    <div class="status-text" id="wakeWordStatus" style="font-size:.75rem;">Wake word: off</div>
                 </div>
             </div>
         </div>
@@ -411,7 +441,8 @@ const API = '';
 const DEFAULT_HOTEL_ID = '2ada3c2b-b208-4599-9c46-f32dc16ff950';
 const HOTEL_ID = new URLSearchParams(location.search).get('id') || DEFAULT_HOTEL_ID;
 const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-const VOICE_ENABLED = false; // disable voice UI until ASR provider is configured
+let voiceEnabled = false; // runtime flag from /api/health
+let ttsVoice = 'kokoro';   // runtime default from /api/health
 
 // ── Provider state ──
 let currentProvider = 'chutes';
@@ -432,6 +463,7 @@ const micBtn          = $('#micBtn');
 const micText         = $('#micText');
 const voiceResetBtn   = $('#voiceResetBtn');
 const voiceStatus     = $('#voiceStatus');
+const voiceSelect     = $('#voiceSelect');
 const trBtn           = $('#trBtn');
 const trResult        = $('#trResult');
 const slidesBtn       = $('#slidesBtn');
@@ -444,8 +476,8 @@ const providerSelect  = $('#providerSelect');
 const modelSelect     = $('#modelSelect');
 const providerBadge   = $('#providerBadge');
 
-// Disable voice features when ASR is not configured
-if (!VOICE_ENABLED) {
+// Voice UI toggles (runtime)
+function disableVoiceUi() {
     const voiceTab = document.querySelector('.tab[data-panel=\"voice\"]');
     if (voiceTab) voiceTab.style.display = 'none';
     const voicePanel = $('#panel-voice');
@@ -453,6 +485,16 @@ if (!VOICE_ENABLED) {
     if (voiceStatus) voiceStatus.textContent = 'Voice disabled (ASR not configured)';
     if (micBtn) { micBtn.disabled = true; micBtn.classList.add('disabled'); }
     if (voiceResetBtn) voiceResetBtn.disabled = true;
+}
+
+function enableVoiceUi() {
+    const voiceTab = document.querySelector('.tab[data-panel=\"voice\"]');
+    if (voiceTab) voiceTab.style.display = '';
+    const voicePanel = $('#panel-voice');
+    if (voicePanel) voicePanel.style.display = '';
+    if (voiceStatus) voiceStatus.textContent = 'Hold the mic to speak';
+    if (micBtn) { micBtn.disabled = false; micBtn.classList.remove('disabled'); }
+    if (voiceResetBtn) voiceResetBtn.disabled = false;
 }
 
 // ═══ Tabs ═══
@@ -492,6 +534,20 @@ $$('.tab').forEach(tab => {
         console.warn('Provider init:', e);
         providerSelect.innerHTML = '<option value="chutes">Chutes.ai (offline)</option>';
         modelSelect.innerHTML = '<option>—</option>';
+    }
+
+    // Health: enable/disable voice
+    try {
+        const res = await fetch(`${API}/api/health`);
+        if (!res.ok) throw new Error(res.status);
+        const h = await res.json();
+        voiceEnabled = !!h.asr_configured;
+        if (voiceEnabled) enableVoiceUi(); else disableVoiceUi();
+        ttsVoice = h.tts_model || 'kokoro';
+        if (voiceSelect) voiceSelect.value = ttsVoice;
+    } catch (e) {
+        console.warn('Health init:', e);
+        disableVoiceUi();
     }
 })();
 
@@ -574,6 +630,20 @@ function addMsg(container, role, text) {
     d.innerHTML = `<div class="lbl">${role === 'user' ? 'You' : 'Concierge'}</div><div>${text}</div>`;
     container.appendChild(d);
     container.scrollTop = container.scrollHeight;
+    return d;
+}
+
+function addError(container, text) {
+    const d = document.createElement('div');
+    d.className = 'msg assistant';
+    d.style.border = '1px solid rgba(255,71,87,.4)';
+    d.innerHTML = `
+      <div class="lbl" style="color:#ff8a8a;">Error</div>
+      <div style="white-space:pre-wrap;word-break:break-word;">${text}</div>
+      <button style="margin-top:6px;padding:6px 10px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#fff;border-radius:8px;cursor:pointer;font-size:.8rem;" onclick="navigator.clipboard.writeText('${text.replace(/'/g, "\\'")}').catch(()=>{})">Copy error</button>
+    `;
+    container.appendChild(d);
+    container.scrollTop = container.scrollHeight;
 }
 
 async function sendChat() {
@@ -582,29 +652,67 @@ async function sendChat() {
     chatInput.value = '';
     addMsg(chatMessages, 'user', text);
     setStatus(chatStatus, 'Thinking...');
+    // Streaming via /api/chat-stream
+    const streamingMsg = addMsg(chatMessages, 'assistant', '...');
+    let assistantText = '';
     try {
-        const r = await fetch(`${API}/api/chat`, {
+        const r = await fetch(`${API}/api/chat-stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: text, session_id: sessionId, hotel_id: HOTEL_ID, provider: currentProvider, model: currentModel })
         });
-        const data = await r.json();
-        if (data.success) {
-            let meta = '';
-            if (data.skill_used && data.skill_used !== 'general_chat' && data.skill_used !== 'demo_mode')
-                meta += ` <span style="font-size:.7rem;color:var(--primary);">[${data.skill_used}]</span>`;
-            const provName = data.provider || currentProvider;
-            const modShort = (data.model || currentModel).split('/').pop();
-            meta += ` <span style="font-size:.65rem;color:#666;">${provName}/${modShort}</span>`;
-            addMsg(chatMessages, 'assistant', data.response + meta);
-            speakText(data.response);
-        } else {
-            setStatus(chatStatus, data.error || 'Error', true);
+        if (!r.ok) {
+            const bodyText = await r.text();
+            addError(chatMessages, `Stream failed (${r.status}): ${bodyText.slice(0,400)}`);
+            setStatus(chatStatus, 'Stream error', true);
+            streamingMsg.remove();
+            return;
+        }
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            buffer = buffer.replace(/\r/g, ''); // normalize CRLF
+            let idx;
+            while ((idx = buffer.indexOf('\n\n')) >= 0) {
+                const rawEvent = buffer.slice(0, idx).trim();
+                buffer = buffer.slice(idx + 2);
+                if (!rawEvent.startsWith('data:')) continue;
+                const payload = rawEvent.slice(5).trim();
+                if (!payload) continue;
+                let obj;
+                try { obj = JSON.parse(payload); }
+                catch (err) { console.warn('SSE parse error', err, payload); continue; }
+                if (obj.delta) {
+                    assistantText += obj.delta;
+                    streamingMsg.querySelector('div:nth-child(2)').textContent = assistantText;
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+                if (obj.error) {
+                    setStatus(chatStatus, obj.error, true);
+                    streamingMsg.querySelector('div:nth-child(2)').textContent = 'Error';
+                }
+                if (obj.done) {
+                    if (obj.text) assistantText = obj.text;
+                    streamingMsg.querySelector('div:nth-child(2)').textContent = assistantText || 'No response';
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    if (assistantText) speakText(assistantText);
+                    setStatus(chatStatus, assistantText ? 'Ready' : 'No response', !assistantText);
+                }
+            }
+        }
+        if (!assistantText) {
+            streamingMsg.querySelector('div:nth-child(2)').textContent = 'No response';
+            addError(chatMessages, 'Chat stream returned no tokens. Please retry.');
         }
     } catch (e) {
         setStatus(chatStatus, 'Connection error', true);
+        streamingMsg.querySelector('div:nth-child(2)').textContent = 'Error';
+        addError(chatMessages, `Stream exception: ${e.message || e}`);
     }
-    setStatus(chatStatus, 'Ready');
 }
 
 chatSendBtn.addEventListener('click', sendChat);
@@ -618,12 +726,18 @@ resetBtn.addEventListener('click', async () => {
 
 // ═══ Voice ═══
 let mediaRecorder, audioChunks = [], isRecording = false;
+let micStream = null;
+let audioCtx = null;
+let analyser = null;
+let vadSilenceFrames = 0;
+let vadThreshold = 0.01;      // RMS threshold for silence
+let vadTimeoutSec = 1.5;      // seconds of silence before auto-stop
 
 async function initMic() {
-    if (!VOICE_ENABLED) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+    if (!voiceEnabled) return;
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-    mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+    mediaRecorder = new MediaRecorder(micStream, { mimeType: mime });
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunks, { type: mime });
@@ -633,10 +747,11 @@ async function initMic() {
 }
 
 function startRec() {
-    if (!VOICE_ENABLED) {
+    if (!voiceEnabled) {
         setStatus(voiceStatus, 'Voice disabled (ASR not configured)', true);
         return;
     }
+    if (!micStream) { initMic().then(startRec); return; }
     if (!mediaRecorder || mediaRecorder.state !== 'inactive') return;
     audioChunks = [];
     mediaRecorder.start();
@@ -645,10 +760,11 @@ function startRec() {
     micBtn.className = 'btn-mic recording';
     micText.textContent = 'Release to Send';
     setStatus(voiceStatus, 'Listening...');
+    startVad();
 }
 
 function stopRec() {
-    if (!VOICE_ENABLED) return;
+    if (!voiceEnabled) return;
     if (!isRecording) return;
     mediaRecorder.stop();
     isRecording = false;
@@ -656,27 +772,93 @@ function stopRec() {
     micBtn.className = 'btn-mic idle';
     micText.textContent = 'Hold to Speak';
     setStatus(voiceStatus, 'Processing...');
+    stopVad();
+}
+
+// Audio queue for streaming TTS playback
+let audioQueue = [];
+let isPlayingQueue = false;
+
+async function playAudioQueue() {
+    if (isPlayingQueue) return;
+    isPlayingQueue = true;
+    while (audioQueue.length > 0) {
+        const b64 = audioQueue.shift();
+        await new Promise(resolve => {
+            const audio = new Audio('data:audio/wav;base64,' + b64);
+            audio.onended = resolve;
+            audio.onerror = resolve;
+            audio.play().catch(resolve);
+        });
+    }
+    isPlayingQueue = false;
 }
 
 async function sendVoice(blob) {
-    if (!VOICE_ENABLED) return;
+    if (!voiceEnabled) return;
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     reader.onloadend = async () => {
+        const b64Audio = reader.result.split(',')[1];
+        const useStreaming = true;
+
         try {
-            const r = await fetch(`${API}/api/voice-chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ audio_base64: reader.result.split(',')[1], session_id: sessionId, hotel_id: HOTEL_ID })
-            });
-            const data = await r.json();
-            if (data.success) {
-                addMsg(voiceMessages, 'user', data.transcription);
-                addMsg(voiceMessages, 'assistant', data.response);
-                speakText(data.response);
-                setStatus(voiceStatus, 'Ready');
+            if (useStreaming) {
+                // Streaming TTS mode
+                setStatus(voiceStatus, 'Thinking...');
+                const r = await fetch(`${API}/api/voice-chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice, stream_tts: true })
+                });
+
+                const eventReader = r.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                audioQueue = [];
+
+                while (true) {
+                    const { done, value } = await eventReader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const evt = JSON.parse(line.slice(6));
+                            if (evt.type === 'transcription') {
+                                addMsg(voiceMessages, 'user', evt.text);
+                                setStatus(voiceStatus, 'Speaking...');
+                            } else if (evt.type === 'response') {
+                                addMsg(voiceMessages, 'assistant', evt.text);
+                            } else if (evt.type === 'audio_chunk') {
+                                audioQueue.push(evt.audio_base64);
+                                playAudioQueue();
+                            } else if (evt.type === 'done') {
+                                setStatus(voiceStatus, 'Ready');
+                            }
+                        } catch(e) {}
+                    }
+                }
             } else {
-                setStatus(voiceStatus, data.error || 'Error', true);
+                // Non-streaming fallback
+                const r = await fetch(`${API}/api/voice-chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice })
+                });
+                const data = await r.json();
+                if (data.success) {
+                    addMsg(voiceMessages, 'user', data.transcription);
+                    addMsg(voiceMessages, 'assistant', data.response);
+                    if (data.audio_base64) playBase64Audio(data.audio_base64);
+                    else speakText(data.response);
+                    setStatus(voiceStatus, 'Ready');
+                } else {
+                    setStatus(voiceStatus, data.error || 'Error', true);
+                }
             }
         } catch (e) {
             setStatus(voiceStatus, 'Connection error', true);
@@ -685,19 +867,194 @@ async function sendVoice(blob) {
 }
 
 // Touch
-if (VOICE_ENABLED) {
-    micBtn.addEventListener('touchstart', e => { e.preventDefault(); if (!mediaRecorder) initMic().then(startRec); else startRec(); }, { passive:false });
-    micBtn.addEventListener('touchend', e => { e.preventDefault(); stopRec(); }, { passive:false });
-    micBtn.addEventListener('touchcancel', stopRec);
-    // Mouse
-    micBtn.addEventListener('mousedown', () => { if (!mediaRecorder) initMic().then(startRec); else startRec(); });
-    micBtn.addEventListener('mouseup', stopRec);
-    micBtn.addEventListener('mouseleave', () => { if (isRecording) stopRec(); });
+micBtn.addEventListener('touchstart', e => { e.preventDefault(); if (!mediaRecorder) initMic().then(startRec); else startRec(); }, { passive:false });
+micBtn.addEventListener('touchend', e => { e.preventDefault(); stopRec(); }, { passive:false });
+micBtn.addEventListener('touchcancel', stopRec);
+// Mouse
+micBtn.addEventListener('mousedown', () => { if (!mediaRecorder) initMic().then(startRec); else startRec(); });
+micBtn.addEventListener('mouseup', stopRec);
+micBtn.addEventListener('mouseleave', () => { if (isRecording) stopRec(); });
 
-    voiceResetBtn.addEventListener('click', async () => {
-        try { await fetch(`${API}/api/reset`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:sessionId}) }); } catch(e) {}
-        voiceMessages.innerHTML = '<div class="msg assistant"><div class="lbl">Concierge</div><div>Conversation reset. Hold the mic to speak.</div></div>';
-        setStatus(voiceStatus, 'Ready');
+voiceResetBtn.addEventListener('click', async () => {
+    try { await fetch(`${API}/api/reset`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:sessionId}) }); } catch(e) {}
+    voiceMessages.innerHTML = '<div class="msg assistant"><div class="lbl">Concierge</div><div>Conversation reset. Hold the mic to speak.</div></div>';
+    setStatus(voiceStatus, 'Ready');
+});
+
+voiceSelect.addEventListener('change', () => {
+    ttsVoice = voiceSelect.value;
+});
+
+const vadThresholdInput = $('#vadThreshold');
+const vadTimeoutInput = $('#vadTimeout');
+const vadThresholdLabel = $('#vadThresholdLabel');
+const vadTimeoutLabel = $('#vadTimeoutLabel');
+
+if (vadThresholdInput) {
+    vadThresholdInput.addEventListener('input', () => {
+        vadThreshold = parseFloat(vadThresholdInput.value);
+        vadThresholdLabel.textContent = vadThreshold.toFixed(3);
+    });
+    vadThresholdLabel.textContent = parseFloat(vadThresholdInput.value).toFixed(3);
+}
+if (vadTimeoutInput) {
+    vadTimeoutInput.addEventListener('input', () => {
+        vadTimeoutSec = parseFloat(vadTimeoutInput.value);
+        vadTimeoutLabel.textContent = vadTimeoutSec.toFixed(1) + 's';
+    });
+    vadTimeoutLabel.textContent = parseFloat(vadTimeoutInput.value).toFixed(1) + 's';
+}
+
+// Simple client-side VAD: stop if silence > ~1.5s
+function startVad() {
+    if (!micStream) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(micStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    vadSilenceFrames = 0;
+
+    function tick() {
+        if (!analyser) return;
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+            const v = (data[i] - 128) / 128;
+            sum += v * v;
+        }
+        const rms = Math.sqrt(sum / data.length);
+        if (rms < vadThreshold) vadSilenceFrames++; else vadSilenceFrames = 0;
+        const limitFrames = Math.floor((vadTimeoutSec * 1000) / (1000/60)); // ~60 fps
+        if (vadSilenceFrames > limitFrames && isRecording) {
+            stopRec();
+            return;
+        }
+        requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+}
+
+function stopVad() {
+    vadSilenceFrames = 0;
+    if (analyser) analyser.disconnect();
+    analyser = null;
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+}
+
+// Play base64 audio (wav) helper
+function playBase64Audio(b64) {
+    const audio = new Audio('data:audio/wav;base64,' + b64);
+    audio.play().catch(()=>{});
+}
+
+// ═══ Wake Word Detection ═══
+let wakeWordActive = false;
+let wakeWordRecognition = null;
+const wakeWordToggle = $('#wakeWordToggle');
+const wakeWordIndicator = $('#wakeWordIndicator');
+const wakeWordInput = $('#wakeWordInput');
+const wakeWordStatus = $('#wakeWordStatus');
+
+function getWakeWords() {
+    return (wakeWordInput?.value || 'hey nomad,nomad').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
+}
+
+function startWakeWordDetection() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        wakeWordStatus.textContent = 'Wake word: not supported in this browser';
+        wakeWordToggle.checked = false;
+        return;
+    }
+
+    wakeWordRecognition = new SpeechRecognition();
+    wakeWordRecognition.continuous = true;
+    wakeWordRecognition.interimResults = true;
+    wakeWordRecognition.lang = 'en-US';
+
+    wakeWordRecognition.onresult = (event) => {
+        const wakeWords = getWakeWords();
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript.toLowerCase().trim();
+            for (const trigger of wakeWords) {
+                if (transcript.includes(trigger)) {
+                    // Wake word detected!
+                    wakeWordIndicator.style.background = '#f9e2af';
+                    wakeWordStatus.textContent = `Heard: "${trigger}" — recording...`;
+                    if (navigator.vibrate) navigator.vibrate([20, 100, 20]);
+                    // Stop wake word, start recording
+                    stopWakeWordDetection(true);
+                    setTimeout(() => {
+                        if (!mediaRecorder) initMic().then(() => { startRec(); scheduleWakeWordResume(); });
+                        else { startRec(); scheduleWakeWordResume(); }
+                    }, 200);
+                    return;
+                }
+            }
+        }
+    };
+
+    wakeWordRecognition.onend = () => {
+        // Auto-restart if still active
+        if (wakeWordActive && !isRecording) {
+            try { wakeWordRecognition.start(); } catch(e) {}
+        }
+    };
+
+    wakeWordRecognition.onerror = (e) => {
+        if (e.error === 'not-allowed') {
+            wakeWordStatus.textContent = 'Wake word: microphone permission denied';
+            wakeWordToggle.checked = false;
+            wakeWordActive = false;
+            return;
+        }
+        // Auto-restart on other errors
+        if (wakeWordActive) {
+            setTimeout(() => {
+                try { wakeWordRecognition.start(); } catch(ex) {}
+            }, 500);
+        }
+    };
+
+    wakeWordActive = true;
+    wakeWordIndicator.style.background = '#a6e3a1';
+    wakeWordIndicator.style.animation = 'pulse 2s infinite';
+    wakeWordStatus.textContent = `Listening for: ${getWakeWords().join(', ')}`;
+    try { wakeWordRecognition.start(); } catch(e) {}
+}
+
+function stopWakeWordDetection(temporary = false) {
+    if (wakeWordRecognition) {
+        try { wakeWordRecognition.stop(); } catch(e) {}
+    }
+    if (!temporary) {
+        wakeWordActive = false;
+        wakeWordIndicator.style.background = '#555';
+        wakeWordIndicator.style.animation = 'none';
+        wakeWordStatus.textContent = 'Wake word: off';
+    }
+}
+
+function scheduleWakeWordResume() {
+    // After recording finishes and response plays, resume wake word
+    const checkInterval = setInterval(() => {
+        if (!isRecording && wakeWordActive) {
+            clearInterval(checkInterval);
+            setTimeout(() => {
+                wakeWordIndicator.style.background = '#a6e3a1';
+                wakeWordStatus.textContent = `Listening for: ${getWakeWords().join(', ')}`;
+                try { wakeWordRecognition.start(); } catch(e) {}
+            }, 1000);
+        }
+    }, 500);
+}
+
+if (wakeWordToggle) {
+    wakeWordToggle.addEventListener('change', () => {
+        if (wakeWordToggle.checked) startWakeWordDetection();
+        else stopWakeWordDetection();
     });
 }
 

@@ -1,56 +1,66 @@
-.PHONY: help server server-bg server-stop web install clean
+.PHONY: help venv install run run-bg stop reload web logs test clean
 
-# Default target: display help
+PY ?= python3
+VENV ?= .venv
+BIN  ?= $(VENV)/bin
+PYTHON ?= $(BIN)/python
+PIP ?= $(BIN)/pip
+HOST ?= 0.0.0.0
+PORT ?= 8088
+
 help:
-	@echo "Usage: make [command]"
+	@echo "Usage: make [target]"
 	@echo ""
-	@echo "Commands:"
-	@echo "  server      Start the Backend API server (Flask)"
-	@echo "  server-stop Stop the running server"
-	@echo "  web      Open the Hotel Assistant web widget in your browser"
-	@echo "  logs     Watch server logs in real-time"
-	@echo "  install  Install Python dependencies"
-	@echo "  clean    Remove temporary files and caches"
+	@echo "Targets:"
+	@echo "  venv        Create local virtualenv (.venv)"
+	@echo "  install     Install deps into .venv (requirements.txt)"
+	@echo "  run         Start Flask API (loads .env, Chutes voice ready)"
+	@echo "  run-bg      Start API in background -> server_run.log"
+	@echo "  stop        Stop API on port $(PORT)"
+	@echo "  web         Open http://localhost:$(PORT)"
+	@echo "  logs        Tail server_run.log"
+	@echo "  test        Run pytest -q"
+	@echo "  clean       Remove __pycache__ and *.pyc"
 
-# Start the Flask backend server (without auto-reload for stability)
-server:
-	@echo "Starting Hotel Assistant Server..."
-	@FLASK_DEBUG=0 /Users/andreyzherditskiy/work/zai-voice-2/.venv/bin/python api/index.py
+$(BIN)/python:
+	@$(PY) -m venv $(VENV)
+	@$(PYTHON) -m pip install -U pip
 
-# Start server in background
-server-bg:
-	@echo "Starting Hotel Assistant Server in background..."
-	@FLASK_DEBUG=0 /Users/andreyzherditskiy/work/zai-voice-2/.venv/bin/python api/index.py > server_run.log 2>&1 &
+venv: $(BIN)/python
+
+install: venv
+	@$(PYTHON) -m pip install -r requirements.txt
+
+run: venv
+	@echo "Starting API on $(HOST):$(PORT)..."
+	@FLASK_DEBUG=0 HOST=$(HOST) PORT=$(PORT) $(PYTHON) api/index.py
+
+run-bg: venv
+	@echo "Starting API in background on $(HOST):$(PORT)..."
+	@FLASK_DEBUG=0 HOST=$(HOST) PORT=$(PORT) $(PYTHON) api/index.py > server_run.log 2>&1 &
 	@sleep 2
-	@curl -s http://127.0.0.1:8088/api/health > /dev/null && echo "✓ Server running on http://localhost:8088" || echo "✗ Server failed to start"
+	@curl -s http://127.0.0.1:$(PORT)/api/health > /dev/null && echo "✓ http://localhost:$(PORT)" || echo "✗ server failed"
 
-# Stop the running server
-server-stop:
-	@echo "Stopping server on port 8088..."
-	@PID=$$(lsof -ti:8088); \
-	if [ -n "$$PID" ]; then \
-		kill $$PID 2>/dev/null && echo "✓ Server stopped (PID $$PID)"; \
-	else \
-		echo "No server running on port 8088"; \
-	fi
+stop:
+	@echo "Stopping server on port $(PORT)..."
+	@PID=$$(lsof -ti:$(PORT)); \
+	if [ -n "$$PID" ]; then kill $$PID 2>/dev/null && echo "✓ Stopped PID $$PID"; else echo "No server on $(PORT)"; fi
 
-# Open the web widget in the default browser
+reload: stop
+	@$(MAKE) run
+
 web:
-	@echo "Opening Hotel Assistant..."
-	@open "http://localhost:8088"
+	@echo "Opening web UI..."
+	@open "http://localhost:$(PORT)"
 
-# Watch logs
 logs:
-	@echo "Tailing server logs..."
-	@tail -f server.log
+	@echo "Tailing server_run.log..."
+	@tail -f server_run.log
 
-# Install dependencies
-install:
-	@echo "Installing dependencies..."
-	@/Users/andreyzherditskiy/work/zai-voice-2/.venv/bin/python -m pip install -r api/requirements.txt
+test: venv
+	@$(PYTHON) -m pytest -q
 
-# Clean up
 clean:
-	@echo "Cleaning up..."
+	@echo "Cleaning..."
 	@find . -type d -name "__pycache__" -exec rm -rf {} +
 	@find . -type f -name "*.pyc" -delete

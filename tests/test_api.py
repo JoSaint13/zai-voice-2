@@ -97,36 +97,63 @@ class TestChatEndpoint:
 
 
 class TestTranscribeEndpoint:
-    """Test suite for /api/transcribe endpoint (now a 501 stub)."""
+    """Test suite for /api/transcribe endpoint (Chutes STT)."""
 
     def test_transcribe_returns_501(self, client):
-        """Transcribe is not available (no ASR provider configured) — returns 501."""
-        response = client.post(
-            '/api/transcribe',
-            data=json.dumps({'audio_base64': 'dGVzdA=='}),
-            content_type='application/json'
-        )
+        """Transcribe returns text when STT succeeds (mocked)."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"text": "hello world"}
 
-        assert response.status_code == 501
+        with patch('requests.post', return_value=mock_resp):
+            response = client.post(
+                '/api/transcribe',
+                data=json.dumps({'audio_base64': 'dGVzdA=='}),
+                content_type='application/json'
+            )
+
+        assert response.status_code == 200
         data = json.loads(response.data)
-        assert data['success'] is False
-        assert 'not available' in data.get('error', '').lower()
+        assert data['success'] is True
+        assert data['text'] == 'hello world'
 
 
 class TestVoiceChatEndpoint:
-    """Test suite for /api/voice-chat endpoint (now a 501 stub)."""
+    """Test suite for /api/voice-chat endpoint (STT -> LLM -> TTS)."""
 
     def test_voice_chat_returns_501(self, client):
-        """Voice chat is not available (no ASR provider configured) — returns 501."""
-        response = client.post(
-            '/api/voice-chat',
-            data=json.dumps({'audio_base64': 'dGVzdA=='}),
-            content_type='application/json'
-        )
+        """Voice chat returns combined result when all stages succeed (mocked)."""
+        # Mock STT, LLM, TTS sequential calls
+        stt_resp = MagicMock(status_code=200)
+        stt_resp.json.return_value = {"text": "hello"}
+        llm_resp = MagicMock(status_code=200)
+        llm_resp.json.return_value = {"choices": [{"message": {"content": "Hi there!"}}]}
+        tts_resp = MagicMock(status_code=200)
+        tts_resp.json.return_value = {"audio": "bWFkZWF1ZGlv"}
 
-        assert response.status_code == 501
+        def side_effect(*args, **kwargs):
+            url = args[0]
+            if 'audio/transcriptions' in url:
+                return stt_resp
+            if 'chat/completions' in url:
+                return llm_resp
+            if 'audio/speech' in url:
+                return tts_resp
+            return llm_resp
+
+        with patch('requests.post', side_effect=side_effect):
+            response = client.post(
+                '/api/voice-chat',
+                data=json.dumps({'audio_base64': 'dGVzdA==', 'session_id': 'voice_test'}),
+                content_type='application/json'
+            )
+
+        assert response.status_code == 200
         data = json.loads(response.data)
-        assert data['success'] is False
+        assert data['success'] is True
+        assert data['transcription'] == 'hello'
+        assert data['response'] == 'Hi there!'
+        assert 'audio_base64' in data
 
 
 class TestTranslateEndpoint:

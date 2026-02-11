@@ -12,6 +12,7 @@ import asyncio
 import traceback
 from typing import Dict, Any, List
 from flask import Flask, request, jsonify, send_from_directory
+from flask import Response
 from dotenv import load_dotenv
 import requests
 
@@ -28,10 +29,36 @@ PUBLIC_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
 
 # Chutes.ai API config (sole provider)
 CHUTES_API_KEY = os.getenv('CHUTES_API_KEY', '')
+# Guard against truncated/non-ASCII keys (common copy/paste issue with ellipsis)
+if any(ord(c) > 127 for c in CHUTES_API_KEY):
+    raise ValueError("CHUTES_API_KEY contains non-ASCII characters (maybe '…'). Paste the full ASCII key without ellipsis.")
+
+CHUTES_BASE = os.getenv("CHUTES_BASE", "https://api.chutes.ai")
 CHUTES_HEADERS = {
     'Authorization': f'Bearer {CHUTES_API_KEY}',
     'Content-Type': 'application/json'
 }
+CHUTES_STT_MODEL = os.getenv("CHUTES_STT_MODEL", "openai/whisper-large-v3")
+CHUTES_STT_ENDPOINT = os.getenv("CHUTES_STT_ENDPOINT")  # optional direct chute endpoint (e.g., https://chutes-whisper-large-v3.chutes.ai/transcribe)
+CHUTES_TTS_MODEL = os.getenv("CHUTES_TTS_MODEL", "kokoro")
+CHUTES_TTS_ENDPOINT = os.getenv("CHUTES_TTS_ENDPOINT", "https://chutes-kokoro.chutes.ai/speak")
+
+# ── Named LLM Roles ──
+# 🧠 brain_llm — reasoning, routing, chat
+BRAIN_LLM_MODEL = os.getenv("BRAIN_LLM_MODEL", "XiaomiMiMo/MiMo-V2-Flash")
+BRAIN_LLM_ENDPOINT = os.getenv("BRAIN_LLM_ENDPOINT", "https://llm.chutes.ai/v1/chat/completions")
+# 🎧 voice_listen_llm — STT (Whisper)
+VOICE_LISTEN_LLM = CHUTES_STT_ENDPOINT or f"{CHUTES_BASE}/v1/audio/transcriptions"
+# 🔊 speech_llm — TTS (Kokoro)
+SPEECH_LLM = CHUTES_TTS_ENDPOINT
+
+
+class ChutesHTTPError(Exception):
+    """HTTP error wrapper for Chutes API."""
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
 
 # ── Provider Registry ──
 PROVIDERS = {
@@ -144,6 +171,135 @@ def get_user_friendly_error(exception):
     return f"⚠️ Something went wrong: {error_str[:100]}. Please try again."
 
 
+# ── Chutes helpers ──
+def chutes_post_json(path: str, payload: dict, stream: bool = False):
+    """Minimal JSON POST wrapper to Chutes with error handling."""
+    if not CHUTES_API_KEY:
+        raise ValueError("Chutes API key not configured")
+
+    url = f"{CHUTES_BASE}{path}"
+    log_payload = {k: v for k, v in payload.items() if k not in ("audio", "audio_base64", "input")}
+    logger.info(f"[chutes] POST {path} stream={stream} payload={log_payload}")
+    r = requests.post(url, headers=CHUTES_HEADERS, json=payload, timeout=(5, 60), stream=stream)
+    logger.info(f"[chutes] {path} -> HTTP {r.status_code}")
+    if not stream and r.status_code != 200:
+        try:
+            body = r.json()
+            msg = body.get("error", body.get("detail", r.text))
+        except Exception:
+            msg = r.text
+        raise ChutesHTTPError(r.status_code, str(msg)[:400])
+    return r
+
+
+def call_chutes_stt(audio_base64: str, language: str | None = None) -> str:
+    """Call Chutes STT (Whisper v3). Returns transcription string."""
+    # If direct chute endpoint provided, use it (expects audio_b64)
+    if CHUTES_STT_ENDPOINT:
+        payload = {
+            "audio_b64": audio_base64,
+            "language": language,
+        }
+        # clean None keys
+        payload = {k: v for k, v in payload.items() if v is not None}
+        headers = {
+            "Authorization": f"Bearer {CHUTES_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        logger.info(f"[stt] endpoint={CHUTES_STT_ENDPOINT} payload_keys={list(payload.keys())}")
+        r = requests.post(CHUTES_STT_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+        if r.status_code != 200:
+            try:
+                msg = r.json()
+            except Exception:
+                msg = r.text
+            raise ChutesHTTPError(r.status_code, f"Direct STT endpoint error: {msg}")
+        data = r.json()
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        if isinstance(data, str):
+            text = data
+        else:
+            text = data.get("text") or data.get("transcription") or data.get("transcript") or ""
+        logger.info(f"[stt] endpoint chars={len(text)}")
+        return text
+
+    # Default: central API
+    payload = {
+        "model": CHUTES_STT_MODEL,
+        "audio": audio_base64,
+    }
+    if language:
+        payload["language"] = language
+
+    resp = chutes_post_json("/v1/audio/transcriptions", payload)
+    data = resp.json()
+    text = data.get("text") or data.get("transcription") or ""
+    logger.info(f"[stt] model={CHUTES_STT_MODEL} lang={language or 'auto'} chars={len(text)}")
+    return text
+
+
+def call_chutes_tts(text: str, voice: str | None = None) -> str:
+    """Call Chutes TTS, return audio base64 (wav)."""
+    # Kokoro voice IDs are like "af_heart", not model names
+    if not voice or voice in ("kokoro", "csm-1b"):
+        voice_model = "af_heart"
+    else:
+        voice_model = voice
+    if CHUTES_TTS_ENDPOINT:
+        payload = {
+            "text": text,
+            "speed": 1,
+            "voice": voice_model,
+        }
+        headers = {
+            "Authorization": f"Bearer {CHUTES_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        logger.info(f"[tts] endpoint={CHUTES_TTS_ENDPOINT} voice={voice_model} chars={len(text)}")
+        r = requests.post(CHUTES_TTS_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+        if r.status_code != 200:
+            try:
+                msg = r.json()
+            except Exception:
+                msg = r.text[:200]
+            raise ChutesHTTPError(r.status_code, f"Direct TTS endpoint error: {msg}")
+
+        # Kokoro returns raw audio bytes (WAV) or JSON with base64
+        content_type = r.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            data = r.json()
+            if isinstance(data, list):
+                data = data[0] if data else {}
+            if isinstance(data, str):
+                audio_b64 = data
+            else:
+                audio_b64 = data.get("audio") or data.get("audio_base64") or data.get("data") or ""
+        else:
+            # Raw binary audio — encode to base64
+            import base64
+            audio_b64 = base64.b64encode(r.content).decode("utf-8")
+
+        if not audio_b64:
+            raise RuntimeError(f"TTS response missing audio data (content-type: {content_type})")
+        logger.info(f"[tts] endpoint voice={voice_model} chars={len(text)} audio_len={len(audio_b64)}")
+        return audio_b64
+
+    # Fallback: central API
+    payload = {
+        "model": CHUTES_TTS_MODEL,
+        "input": text,
+        "format": "wav",
+    }
+    resp = chutes_post_json("/v1/audio/speech", payload)
+    data = resp.json()
+    audio_b64 = data.get("audio") or data.get("audio_base64") or data.get("data")
+    if not audio_b64:
+        raise RuntimeError("TTS response missing audio data")
+    logger.info(f"[tts] model={CHUTES_TTS_MODEL} chars={len(text)} audio_len={len(audio_b64)}")
+    return audio_b64
+
+
 def generate_demo_response(user_message, hotel_info=None, recommendations=None):
     """Generate a demo response when the API is unavailable (balance low, etc)."""
     msg_lower = user_message.lower()
@@ -214,7 +370,7 @@ def provider_chat(messages, provider_id=None, model_id=None, temperature=0.7, ma
         'max_tokens': max_tokens,
     }
 
-    logger.info(f"[provider_chat] {prov['name']} / {mid} — {len(messages)} msgs")
+    logger.info(f"[provider_chat] {prov['name']} / {mid} — msgs={len(messages)} temp={temperature} max_tokens={max_tokens}")
 
     r = requests.post(url, headers=headers, json=payload, timeout=(5, 60))
 
@@ -236,6 +392,40 @@ def provider_chat(messages, provider_id=None, model_id=None, temperature=0.7, ma
     import re
     content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
 
+    return content
+
+
+def brain_chat(messages, temperature=0.7, max_tokens=1024):
+    """
+    🧠 brain_llm — primary reasoning via MiMo-V2-Flash (or configured brain model).
+    Uses dedicated endpoint, bypassing the slug-based provider registry.
+    """
+    import re
+    headers = {
+        'Authorization': f'Bearer {CHUTES_API_KEY}',
+        'Content-Type': 'application/json',
+    }
+    payload = {
+        'model': BRAIN_LLM_MODEL,
+        'messages': messages,
+        'temperature': temperature,
+        'max_tokens': max_tokens,
+    }
+    logger.info(f"[brain_chat] {BRAIN_LLM_MODEL} — msgs={len(messages)} temp={temperature} max_tokens={max_tokens}")
+
+    r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+    if r.status_code != 200:
+        try:
+            body = r.json()
+            msg = body.get("error", {}).get("message", r.text[:200]) if isinstance(body.get("error"), dict) else str(body.get("error", r.text[:200]))
+        except Exception:
+            msg = r.text[:200]
+        raise RuntimeError(f"[brain_llm] HTTP {r.status_code}: {msg}")
+
+    data = r.json()
+    msg_obj = data['choices'][0]['message']
+    content = msg_obj.get('content') or msg_obj.get('reasoning_content') or ''
+    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
     return content
 
 
@@ -293,6 +483,11 @@ def list_providers():
         'providers': result,
         'active_provider': active_provider,
         'active_model': active_model,
+        'llm_roles': {
+            'brain_llm': {'model': BRAIN_LLM_MODEL, 'endpoint': BRAIN_LLM_ENDPOINT, 'role': 'Reasoning, routing, chat'},
+            'voice_listen_llm': {'model': CHUTES_STT_MODEL, 'endpoint': VOICE_LISTEN_LLM, 'role': 'Speech-to-text'},
+            'speech_llm': {'model': CHUTES_TTS_MODEL, 'endpoint': SPEECH_LLM, 'role': 'Text-to-speech'},
+        },
     })
 
 
@@ -301,9 +496,14 @@ def health():
     """Simple health check."""
     return jsonify({
         "status": "ok",
-        "active_provider": active_provider,
-        "active_model": active_model,
-        "provider_configured": bool(PROVIDERS.get(active_provider, {}).get("api_key"))
+        "brain_llm": BRAIN_LLM_MODEL,
+        "voice_listen_llm": CHUTES_STT_MODEL,
+        "speech_llm": CHUTES_TTS_MODEL,
+        "provider_configured": bool(CHUTES_API_KEY),
+        "asr_configured": bool(CHUTES_API_KEY),
+        "tts_model": CHUTES_TTS_MODEL,
+        "stt_endpoint": VOICE_LISTEN_LLM,
+        "tts_endpoint": SPEECH_LLM,
     })
 
 
@@ -395,9 +595,9 @@ def route_intent(transcription: str) -> Dict[str, Any]:
         }
     ]
 
-    # Use provider_chat for intent routing
+    # Use brain_llm for intent routing
     try:
-        result_text = provider_chat(messages, temperature=0.1, max_tokens=50)
+        result_text = brain_chat(messages, temperature=0.1, max_tokens=50)
         skill_name = result_text.strip().lower()
     except Exception as e:
         logger.warning(f"Intent routing failed, falling back to general_chat: {e}")
@@ -417,6 +617,275 @@ def route_intent(transcription: str) -> Dict[str, Any]:
         "skill_name": "general_chat",
         "matched": False
     }
+
+
+# ── Agentic Tool Definitions ──
+
+SKILL_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "room_service",
+            "description": "Order food and beverages to the guest's room",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request": {"type": "string", "description": "What the guest wants to order"},
+                },
+                "required": ["request"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "housekeeping",
+            "description": "Request housekeeping services (towels, cleaning, supplies)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request": {"type": "string", "description": "What the guest needs"},
+                },
+                "required": ["request"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "amenities_info",
+            "description": "Get info about hotel amenities, hours, facilities (pool, gym, spa, restaurant)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What amenity or facility the guest is asking about"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wifi_help",
+            "description": "Provide WiFi password or help with connectivity issues",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue": {"type": "string", "description": "WiFi issue description"},
+                },
+                "required": ["issue"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "local_recommendations",
+            "description": "Suggest local restaurants, attractions, points of interest",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What kind of place or activity the guest wants"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "itinerary_planning",
+            "description": "Create personalized day plans and sightseeing itineraries",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request": {"type": "string", "description": "What kind of day plan the guest wants"},
+                },
+                "required": ["request"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "directions",
+            "description": "Help navigate to a destination with directions",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "destination": {"type": "string", "description": "Where the guest wants to go"},
+                },
+                "required": ["destination"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "voice_call",
+            "description": "Make a phone call on behalf of the guest (e.g., call a restaurant to make a reservation)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["initiate_call", "speak", "end_call", "get_status"], "description": "Call action to perform"},
+                    "to": {"type": "string", "description": "Phone number or place name to call"},
+                    "message": {"type": "string", "description": "What to say on the call"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+]
+
+# Map tool names to skill instances
+SKILL_MAP = {}
+for skill in SKILLS:
+    SKILL_MAP[skill.name] = skill
+
+
+def _execute_tool(tool_name: str, arguments: dict, session_id: str) -> str:
+    """Execute a skill tool and return the result as a string."""
+    # Voice call handled separately (Phase 3)
+    if tool_name == "voice_call":
+        return _execute_voice_call(arguments, session_id)
+
+    skill = SKILL_MAP.get(tool_name)
+    if not skill:
+        return f"Unknown tool: {tool_name}"
+
+    context = {
+        "transcription": arguments.get("request") or arguments.get("query") or arguments.get("issue") or arguments.get("destination") or "",
+        "session_id": session_id,
+        "location": "Tokyo",
+        "hotel_location": "NomadAI Hotel",
+    }
+
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(skill.execute(context))
+        loop.close()
+        return result.get("response", str(result))
+    except Exception as e:
+        logger.error(f"[agent_loop] tool {tool_name} failed: {e}")
+        return f"Error executing {tool_name}: {str(e)}"
+
+
+def _execute_voice_call(arguments: dict, session_id: str) -> str:
+    """Mock voice call execution (Phase 3 will add real telephony)."""
+    action = arguments.get("action", "get_status")
+    to = arguments.get("to", "unknown")
+    message = arguments.get("message", "")
+
+    if action == "initiate_call":
+        return json.dumps({"status": "connected", "to": to, "call_id": f"mock_{session_id[:8]}", "message": f"Call connected to {to}. Ready to speak."})
+    elif action == "speak":
+        # Mock: simulate restaurant response
+        mock_responses = {
+            "reservation": f"Restaurant says: 'Sure, we can seat you. What time would you like?'",
+            "menu": f"Restaurant says: 'Today's special is grilled salmon with truffle risotto. We also have a tasting menu available.'",
+            "hours": f"Restaurant says: 'We're open from 11:30 AM to 10 PM today.'",
+        }
+        for keyword, response in mock_responses.items():
+            if keyword in message.lower():
+                return response
+        return f"Restaurant says: 'How can I help you?' (You said: {message})"
+    elif action == "end_call":
+        return json.dumps({"status": "ended", "call_id": f"mock_{session_id[:8]}"})
+    elif action == "get_status":
+        return json.dumps({"status": "idle", "active_calls": 0})
+    return f"Unknown voice_call action: {action}"
+
+
+def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iterations: int = 5) -> str:
+    """
+    🧠 Agentic tool-calling loop.
+    brain_llm decides whether to call tools or respond directly.
+    Supports multi-turn tool calls (up to max_iterations).
+    """
+    import re
+
+    # Build system prompt
+    hotel_context = ""
+    if hotel_info:
+        hotel_context = f"\nHotel: {hotel_info.get('name', 'NomadAI Hotel')}"
+        if hotel_info.get('knowledge_base'):
+            hotel_context += f"\nHotel Knowledge Base:\n{hotel_info['knowledge_base']}"
+
+    system_prompt = f"""You are NomadAI, a voice-first AI hotel concierge assistant.{hotel_context}
+
+You have tools to help guests with hotel services, local recommendations, and making phone calls.
+Use tools when appropriate. Keep spoken responses concise (2-3 sentences).
+If the guest asks you to call a place, use the voice_call tool to initiate and conduct the call, then report back.
+For general conversation, just respond directly without tools."""
+
+    # Init or continue conversation
+    if session_id not in conversations:
+        conversations[session_id] = [{"role": "system", "content": system_prompt}]
+
+    conversations[session_id].append({"role": "user", "content": user_message})
+
+    for iteration in range(max_iterations):
+        # Call brain_llm with tools
+        headers = {
+            'Authorization': f'Bearer {CHUTES_API_KEY}',
+            'Content-Type': 'application/json',
+        }
+        payload = {
+            'model': BRAIN_LLM_MODEL,
+            'messages': conversations[session_id],
+            'temperature': 0.7,
+            'max_tokens': 1024,
+            'tools': SKILL_TOOLS,
+            'tool_choice': 'auto',
+        }
+
+        logger.info(f"[agent_loop] iteration={iteration+1}/{max_iterations} msgs={len(conversations[session_id])}")
+        r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+
+        if r.status_code != 200:
+            logger.error(f"[agent_loop] brain_llm HTTP {r.status_code}: {r.text[:200]}")
+            # Fallback to simple brain_chat without tools
+            return brain_chat(conversations[session_id])
+
+        data = r.json()
+        choice = data['choices'][0]
+        msg = choice['message']
+        finish_reason = choice.get('finish_reason', '')
+
+        # If model wants to call tools
+        if msg.get('tool_calls'):
+            conversations[session_id].append(msg)
+
+            for tool_call in msg['tool_calls']:
+                fn_name = tool_call['function']['name']
+                try:
+                    fn_args = json.loads(tool_call['function']['arguments'])
+                except (json.JSONDecodeError, KeyError):
+                    fn_args = {}
+
+                logger.info(f"[agent_loop] tool_call: {fn_name}({fn_args})")
+                result = _execute_tool(fn_name, fn_args, session_id)
+                logger.info(f"[agent_loop] tool_result: {result[:200]}")
+
+                conversations[session_id].append({
+                    "role": "tool",
+                    "tool_call_id": tool_call['id'],
+                    "content": result,
+                })
+
+            continue  # Next iteration — let brain process tool results
+
+        # Model gave a direct response (no tool calls)
+        content = msg.get('content') or msg.get('reasoning_content') or ''
+        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+        conversations[session_id].append({"role": "assistant", "content": content})
+        return content
+
+    # Max iterations reached — force a final response
+    logger.warning(f"[agent_loop] max iterations ({max_iterations}) reached")
+    return brain_chat(conversations[session_id])
 
 
 @app.route("/", methods=["GET"])
@@ -493,17 +962,27 @@ def ping():
 
 @app.route("/api/transcribe", methods=["POST"])
 def transcribe():
-    """Transcribe audio — currently not available (no ASR provider)."""
-    return jsonify({
-        "error": "Speech-to-text is not currently available (ASR provider not available). Please use the Chat tab to type your message.",
-        "success": False,
-        "reason": "no_asr_provider"
-    }), 501
+    """Transcribe audio via Chutes STT."""
+    try:
+        data = request.get_json() or {}
+        audio_b64 = data.get("audio_base64")
+        language = data.get("language")
+        if not audio_b64:
+            return jsonify({"error": "audio_base64 required"}), 400
+        text = call_chutes_stt(audio_b64, language=language)
+        return jsonify({"success": True, "text": text, "language": language or "auto"})
+    except ChutesHTTPError as e:
+        logger.error(f"STT error {e.status_code}: {e.message}")
+        return jsonify({"error": e.message, "success": False, "reason": f"stt_{e.status_code}"}), 502
+    except Exception as e:
+        error_msg = get_user_friendly_error(e)
+        logger.error(f"STT error: {e}")
+        return jsonify({"error": error_msg, "success": False, "reason": "stt_failed"}), 500
 
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    """Text-based chat with skill routing (for testing without audio)."""
+    """Text-based chat with agentic tool-calling loop."""
     try:
         data = request.get_json()
 
@@ -513,75 +992,23 @@ def chat():
         session_id = data.get("session_id", "default")
         hotel_id = data.get("hotel_id")
         user_message = data["message"]
+        logger.info(f"[chat] session={session_id} brain={BRAIN_LLM_MODEL} len={len(user_message)}")
 
-        # Route to appropriate skill
-        intent_result = route_intent(user_message)
+        # Get hotel context if available
+        hotel_info = None
+        if hotel_id:
+            hotel_info, _ = get_hotel_context(hotel_id)
+            if not hotel_info:
+                hotel_info = DEFAULT_HOTELS.get(hotel_id)
 
-        # Execute skill or fallback to general chat
-        if intent_result["matched"] and intent_result["skill"]:
-            skill = intent_result["skill"]
+        # Run agentic loop
+        assistant_message = agent_loop(user_message, session_id, hotel_info=hotel_info)
 
-            context = {
-                "transcription": user_message,
-                "session_id": session_id,
-                "location": "Tokyo",
-                "hotel_location": "Shibuya Grand Hotel",
-            }
-
-            # Run async skill execution
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            skill_result = loop.run_until_complete(skill.execute(context))
-            loop.close()
-
-            assistant_message = skill_result["response"]
-
-            return jsonify({
-                "response": assistant_message,
-                "skill_used": intent_result["skill_name"],
-                "action": skill_result.get("action"),
-                "metadata": skill_result.get("metadata", {}),
-                "image_url": skill_result.get("image_url"),
-                "video_task_id": skill_result.get("task_id"),
-                "success": True
-            })
-
-        else:
-            # Fallback to general chat
-            if session_id not in conversations:
-                conversations[session_id] = [{
-                    "role": "system",
-                    "content": """You are NomadAI, a helpful hotel voice assistant.
-                    Keep responses concise (2-3 sentences) since they will be spoken aloud.
-                    Be friendly, helpful, and conversational."""
-                }]
-
-            conversations[session_id].append({
-                "role": "user",
-                "content": user_message
-            })
-
-            # Use provider_chat (Chutes-only)
-            provider_id = data.get("provider")
-            model_id = data.get("model")
-            assistant_message = provider_chat(
-                conversations[session_id],
-                provider_id=provider_id,
-                model_id=model_id,
-            )
-
-            conversations[session_id].append({
-                "role": "assistant",
-                "content": assistant_message
-            })
-
-            return jsonify({
-                "response": assistant_message,
-                "skill_used": "general_chat",
-                "provider": provider_id or active_provider,
-                "model": model_id or active_model,
-                "success": True
-            })
+        return jsonify({
+            "response": assistant_message,
+            "brain_llm": BRAIN_LLM_MODEL,
+            "success": True
+        })
 
     except Exception as e:
         error_msg = get_user_friendly_error(e)
@@ -607,14 +1034,143 @@ def chat():
         return jsonify({"error": error_msg, "success": False}), 500
 
 
+def _sse(data: Dict[str, Any]) -> str:
+    """Format SSE event line."""
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def stream_chat(messages, provider_id=None, model_id=None):
+    """Streamed chat (fake-stream via word chunks)."""
+    try:
+        full = brain_chat(messages)
+        words = full.split()
+        for w in words:
+            yield _sse({"delta": w + " "})
+        yield _sse({"done": True, "text": full})
+    except Exception as e:
+        yield _sse({"error": get_user_friendly_error(e)})
+
+
+@app.route("/api/chat-stream", methods=["POST"])
+def chat_stream():
+    """SSE streaming chat via agent_loop."""
+    data = request.get_json() or {}
+    if "message" not in data:
+        return jsonify({"error": "message required"}), 400
+
+    session_id = data.get("session_id", "default-stream")
+    hotel_id = data.get("hotel_id")
+    user_message = data["message"]
+
+    hotel_info = None
+    if hotel_id:
+        hotel_info, _ = get_hotel_context(hotel_id)
+        if not hotel_info:
+            hotel_info = DEFAULT_HOTELS.get(hotel_id)
+
+    def generate():
+        try:
+            full = agent_loop(user_message, session_id, hotel_info=hotel_info)
+            words = full.split()
+            for w in words:
+                yield _sse({"delta": w + " "})
+            yield _sse({"done": True, "text": full})
+        except Exception as e:
+            yield _sse({"error": get_user_friendly_error(e)})
+
+    headers = {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(generate(), headers=headers)
+
+
 @app.route("/api/voice-chat", methods=["POST"])
 def voice_chat():
-    """Voice chat — currently not available (no ASR provider)."""
-    return jsonify({
-        "error": "Voice chat requires speech-to-text which is not currently available (ASR provider not available). Please use the Chat tab to type your message.",
-        "success": False,
-        "reason": "no_asr_provider"
-    }), 501
+    """Voice chat: STT -> LLM -> TTS."""
+    try:
+        data = request.get_json() or {}
+        audio_b64 = data.get("audio_base64")
+        session_id = data.get("session_id", "default")
+        hotel_id = data.get("hotel_id")
+        language = data.get("language")
+        tts_voice = data.get("tts_voice")
+
+        if not audio_b64:
+            return jsonify({"error": "audio_base64 required"}), 400
+
+        logger.info(f"[voice] session={session_id} hotel={hotel_id} brain={BRAIN_LLM_MODEL} tts={tts_voice or CHUTES_TTS_MODEL}")
+
+        # 1) STT (voice_listen_llm)
+        transcription = call_chutes_stt(audio_b64, language=language)
+
+        # 2) Agent loop (brain_llm) — with tool calling
+        hotel_info = None
+        if hotel_id:
+            hotel_info, _ = get_hotel_context(hotel_id)
+            if not hotel_info:
+                hotel_info = DEFAULT_HOTELS.get(hotel_id)
+
+        assistant_message = agent_loop(transcription, session_id, hotel_info=hotel_info)
+
+        # 3) TTS (speech_llm) — stream by sentences if requested
+        stream_mode = data.get("stream_tts", False)
+
+        if stream_mode:
+            # SSE streaming: split into sentences, TTS each, stream audio chunks
+            import re as _re
+            sentences = _re.split(r'(?<=[.!?])\s+', assistant_message)
+            sentences = [s.strip() for s in sentences if s.strip()]
+
+            def generate_voice_stream():
+                yield f"data: {json.dumps({'type': 'transcription', 'text': transcription})}\n\n"
+                yield f"data: {json.dumps({'type': 'response', 'text': assistant_message})}\n\n"
+                for i, sentence in enumerate(sentences):
+                    try:
+                        chunk_audio = call_chutes_tts(sentence, voice=tts_voice)
+                        yield f"data: {json.dumps({'type': 'audio_chunk', 'index': i, 'audio_base64': chunk_audio, 'text': sentence})}\n\n"
+                    except Exception as e:
+                        logger.error(f"[tts_stream] chunk {i} failed: {e}")
+                yield f"data: {json.dumps({'type': 'done', 'total_chunks': len(sentences)})}\n\n"
+
+            return Response(generate_voice_stream(), headers={
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            })
+
+        # Non-streaming: single TTS call
+        audio_reply_b64 = call_chutes_tts(assistant_message, voice=tts_voice)
+
+        return jsonify({
+            "success": True,
+            "transcription": transcription,
+            "response": assistant_message,
+            "audio_base64": audio_reply_b64,
+            "brain_llm": BRAIN_LLM_MODEL,
+            "hotel_id": hotel_id,
+            "session_id": session_id
+        })
+
+    except ChutesHTTPError as e:
+        # Specific handling for missing STT chute
+        logger.error(f"Chutes error {e.status_code}: {e.message}")
+        reason = "voice_chat_failed"
+        status = 502
+        if e.status_code == 404:
+            reason = "stt_not_available"
+            return jsonify({
+                "success": False,
+                "error": "Speech-to-text model not available on this Chutes account. Set CHUTES_STT_MODEL to a chute you own or create a transcription chute.",
+                "reason": reason
+            }), status
+        return jsonify({"success": False, "error": e.message, "reason": reason}), status
+    except Exception as e:
+        error_msg = get_user_friendly_error(e)
+        logger.error(f"Error in /api/voice-chat: {e}")
+        traceback.print_exc()
+        return jsonify({"error": error_msg, "success": False, "reason": "voice_chat_failed"}), 500
 def video_status(task_id):
     """Check video generation status."""
     try:
@@ -698,7 +1254,7 @@ def translate():
             {"role": "user", "content": text}
         ]
         
-        translation = provider_chat(messages, temperature=0.3, max_tokens=2048)
+        translation = brain_chat(messages, temperature=0.3, max_tokens=2048)
         
         return jsonify({
             "translation": translation,
@@ -714,6 +1270,27 @@ def translate():
         print(f"Error in /api/translate: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": error_msg, "success": False}), 500
+
+
+@app.route("/api/tts", methods=["POST"])
+def tts():
+    """Text-to-speech via Chutes."""
+    try:
+        data = request.get_json() or {}
+        text = data.get("text")
+        voice = data.get("voice")
+        if not text:
+            return jsonify({"error": "text required"}), 400
+        audio_b64 = call_chutes_tts(text, voice=voice)
+        return jsonify({"success": True, "audio_base64": audio_b64, "voice": voice or CHUTES_TTS_MODEL, "format": "wav"})
+    except ChutesHTTPError as e:
+        logger.error(f"TTS error {e.status_code}: {e.message}")
+        return jsonify({"error": e.message, "success": False, "reason": f"tts_{e.status_code}"}), 502
+    except Exception as e:
+        error_msg = get_user_friendly_error(e)
+        logger.error(f"TTS error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": error_msg, "success": False, "reason": "tts_failed"}), 500
 
 
 @app.route("/api/generate-slides", methods=["POST"])
