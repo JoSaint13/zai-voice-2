@@ -12,7 +12,6 @@ import asyncio
 import traceback
 from typing import Dict, Any, List
 from flask import Flask, request, jsonify, send_from_directory
-from flask import Response
 from dotenv import load_dotenv
 import requests
 
@@ -1109,7 +1108,8 @@ def chat_stream():
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
     }
-    return Response(generate(), headers=headers)
+    from flask import Response as FlaskResponse
+    return FlaskResponse(generate(), headers=headers)
 
 
 @app.route("/api/voice-chat", methods=["POST"])
@@ -1160,7 +1160,8 @@ def voice_chat():
                         logger.error(f"[tts_stream] chunk {i} failed: {e}")
                 yield f"data: {json.dumps({'type': 'done', 'total_chunks': len(sentences)})}\n\n"
 
-            return Response(generate_voice_stream(), headers={
+            from flask import Response as FlaskResponse
+            return FlaskResponse(generate_voice_stream(), headers={
                 "Content-Type": "text/event-stream",
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
