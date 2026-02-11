@@ -445,6 +445,65 @@ def is_faq_question(text: str) -> bool:
     return False
 
 
+def estimate_query_complexity(user_message: str, session_messages: list) -> str:
+    """
+    Estimate query complexity to optimize max_tokens.
+    
+    Returns:
+        - "simple": Simple FAQ or greeting (max_tokens=256)
+        - "medium": Standard query (max_tokens=512)
+        - "complex": Multi-step or complex query (max_tokens=1024)
+    """
+    msg_lower = user_message.lower()
+    msg_len = len(user_message)
+    
+    # Simple: short greetings or single-fact questions
+    if msg_len < 20:
+        return "simple"
+    
+    # Simple: FAQ patterns
+    if is_faq_question(user_message):
+        return "simple"
+    
+    # Simple: greetings
+    greeting_patterns = [
+        r'\b(hi|hello|hey|good morning|good evening|good afternoon)\b',
+        r'\b(thanks|thank you|ok|okay|yes|no|sure)\b'
+    ]
+    for pattern in greeting_patterns:
+        if re.search(pattern, msg_lower):
+            return "simple"
+    
+    # Complex: multiple questions (and, or, also)
+    if re.search(r'\b(and|also|plus|additionally|furthermore)\b.*\?', msg_lower):
+        return "complex"
+    
+    # Complex: long queries (>100 chars)
+    if msg_len > 100:
+        return "complex"
+    
+    # Complex: planning/itinerary keywords
+    planning_keywords = ['plan', 'itinerary', 'schedule', 'organize', 'arrange', 'book', 'reserve']
+    if any(kw in msg_lower for kw in planning_keywords):
+        return "complex"
+    
+    # Complex: call/phone keywords (requires tool calling)
+    if any(kw in msg_lower for kw in ['call', 'phone', 'contact', 'reach']):
+        return "complex"
+    
+    # Default: medium
+    return "medium"
+
+
+def get_max_tokens_for_complexity(complexity: str) -> int:
+    """Get appropriate max_tokens based on query complexity."""
+    return {
+        "simple": 256,
+        "medium": 512,
+        "complex": 1024
+    }.get(complexity, 512)
+
+
 # Initialize skills
 SKILLS = get_all_skills()
 
@@ -1538,6 +1597,11 @@ For general conversation, just respond directly without tools.{lang_instruction}
     messages.append({"role": "user", "content": user_message})
     set_session_messages(session_id, messages)
     touch_session(session_id)
+    
+    # Adaptive max_tokens based on query complexity (Sprint 4.4 optimization)
+    complexity = estimate_query_complexity(user_message, messages)
+    max_tokens = get_max_tokens_for_complexity(complexity)
+    logger.info(f"[agent_loop] query_complexity={complexity} max_tokens={max_tokens}")
 
     for iteration in range(max_iterations):
         # Call brain_llm with tools
@@ -1549,7 +1613,7 @@ For general conversation, just respond directly without tools.{lang_instruction}
             'model': BRAIN_LLM_MODEL,
             'messages': messages,
             'temperature': 0.7,
-            'max_tokens': 1024,
+            'max_tokens': max_tokens,
             'tools': SKILL_TOOLS,
             'tool_choice': 'auto',
         }
@@ -1966,11 +2030,17 @@ def voice_chat():
             return jsonify({"success": False, "error": error_msg}), 413
 
         logger.info(f"[voice] session={session_id} hotel={hotel_id} brain={BRAIN_LLM_MODEL} tts={tts_voice or CHUTES_TTS_MODEL}")
+        
+        # Track latencies for each stage (Sprint 4.4)
+        stage_latencies = {}
 
         # 1) STT (voice_listen_llm) — with fallback
+        stt_start = time.time()
         try:
             transcription = call_chutes_stt(audio_b64, language=language)
+            stage_latencies['stt_ms'] = round((time.time() - stt_start) * 1000, 1)
         except Exception as e:
+            stage_latencies['stt_ms'] = round((time.time() - stt_start) * 1000, 1)
             logger.error(f"[voice] STT failed after retries: {e}")
             return jsonify({
                 "success": False,
@@ -1984,7 +2054,9 @@ def voice_chat():
             if not hotel_info:
                 hotel_info = DEFAULT_HOTELS.get(hotel_id)
 
+        llm_start = time.time()
         assistant_message = agent_loop(transcription, session_id, hotel_info=hotel_info, language=language, client_context=client_context)
+        stage_latencies['llm_ms'] = round((time.time() - llm_start) * 1000, 1)
 
         # 3) TTS (speech_llm) — stream by sentences if requested, with fallback to text-only
         stream_mode = data.get("stream_tts", False)
@@ -2016,9 +2088,12 @@ def voice_chat():
             })
 
         # Non-streaming: single TTS call with fallback to text-only
+        tts_start = time.time()
         try:
             audio_reply_b64 = call_chutes_tts(assistant_message, voice=tts_voice, language=language)
+            stage_latencies['tts_ms'] = round((time.time() - tts_start) * 1000, 1)
         except Exception as e:
+            stage_latencies['tts_ms'] = round((time.time() - tts_start) * 1000, 1)
             logger.error(f"[voice] TTS failed after retries: {e}. Returning text-only response.")
             # Graceful degradation: return text without audio
             e2e_latency_ms = round((time.time() - request_start) * 1000, 1)
@@ -2037,7 +2112,12 @@ def voice_chat():
                 "brain_llm": BRAIN_LLM_MODEL,
                 "hotel_id": hotel_id,
                 "session_id": session_id
-            }), 200, {"X-Latency-Total": str(e2e_latency_ms)}
+            }), 200, {
+                "X-Latency-Total": str(e2e_latency_ms),
+                "X-Latency-STT": str(stage_latencies.get('stt_ms', 0)),
+                "X-Latency-LLM": str(stage_latencies.get('llm_ms', 0)),
+                "X-Latency-TTS": str(stage_latencies.get('tts_ms', 0))
+            }
 
         e2e_latency_ms = round((time.time() - request_start) * 1000, 1)
         log_structured("voice_chat_complete",
@@ -2045,6 +2125,9 @@ def voice_chat():
             latency_ms=e2e_latency_ms,
             transcription_chars=len(transcription),
             response_chars=len(assistant_message),
+            stt_ms=stage_latencies.get('stt_ms', 0),
+            llm_ms=stage_latencies.get('llm_ms', 0),
+            tts_ms=stage_latencies.get('tts_ms', 0),
             success=True
         )
         
@@ -2056,7 +2139,12 @@ def voice_chat():
             "brain_llm": BRAIN_LLM_MODEL,
             "hotel_id": hotel_id,
             "session_id": session_id
-        }), 200, {"X-Latency-Total": str(e2e_latency_ms)}
+        }), 200, {
+            "X-Latency-Total": str(e2e_latency_ms),
+            "X-Latency-STT": str(stage_latencies['stt_ms']),
+            "X-Latency-LLM": str(stage_latencies['llm_ms']),
+            "X-Latency-TTS": str(stage_latencies['tts_ms'])
+        }
 
     except RuntimeError as e:
         sc = getattr(e, 'status_code', 500)
