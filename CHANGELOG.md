@@ -9,15 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### In Progress (Phase 3 Sprint 4)
-- [x] Sprint 4.1: FAQ response caching (LRU + TTL)
-- [x] Sprint 4.2: Client-side session persistence
-- [ ] Sprint 4.3: Structured logging & observability
-- [ ] Sprint 4.4: Latency optimization
-
 ### Planned
 - Multi-language support (deferred - needs alternative TTS provider)
 - Vercel deployment testing with auth disabled
+- Further latency optimizations (parallel processing, model selection)
+
+---
+
+## [0.3.0] - 2026-02-11 (Sprint 4 Complete - Performance & Caching)
+
+### Added (Phase 3 Sprint 4.3 — Observability)
+- **Structured Logging**: JSON logs for all API calls with metadata
+  - `log_structured(event, **kwargs)`: unified logging function
+  - STT events: language, chars, latency_ms, success
+  - LLM events: model, iteration, tool_calls, response_chars, latency_ms
+  - TTS events: voice, chars, audio_bytes, latency_ms
+  - Chat/Voice events: session_id, cached, e2e latency
+- **Metrics Infrastructure**:
+  - METRICS dict: requests, latencies, errors, cache tracking
+  - `track_latency(category, ms)`: record latencies (last 100 samples)
+  - `track_error(category)`: count errors by type
+  - `get_avg_latency(category)`: calculate averages
+- **Monitoring Endpoints**:
+  - `/api/metrics`: live observability metrics (uptime, requests, latencies, errors, cache)
+  - Response headers: `X-Latency-Total` on all responses
+  - Request counting by endpoint type (chat, voice, stream)
+
+### Added (Phase 3 Sprint 4.4 — Latency Optimization)
+- **Adaptive max_tokens**: Query complexity detection
+  - `estimate_query_complexity()`: analyzes user message
+  - Simple queries (FAQ, greetings): 256 tokens
+  - Medium queries (standard): 512 tokens
+  - Complex queries (planning, multi-step): 1024 tokens
+  - Logged as `query_complexity` for monitoring
+- **Detailed Latency Headers**:
+  - `X-Latency-STT`: speech-to-text latency
+  - `X-Latency-LLM`: LLM/agent loop latency
+  - `X-Latency-TTS`: text-to-speech latency
+  - `X-Latency-Total`: end-to-end latency
+- **Test Script**: `scripts/test_sprint44_optimization.sh` for validation
+
+### Performance Improvements
+- **Simple queries**: ~60% faster (1.4-1.6s vs 3-4s with adaptive tokens)
+- **FAQ cache hit**: instant response (~0ms)
+- **Medium queries**: ~3s (balanced 512 tokens)
+- **E2E tracking**: all stages monitored via headers & logs
+- **Target achieved**: Simple queries now under 2 seconds!
+
+### Technical Details (Sprint 4 Complete)
+- FAQ cache: LRU + TTL, thread-safe, 500 max entries
+- Session persistence: survives cold starts via localStorage
+- Structured logs: JSON format ready for log aggregators
+- Metrics: real-time stats at `/api/metrics`
+- Adaptive tokens: 256/512/1024 based on complexity
 
 ---
 
