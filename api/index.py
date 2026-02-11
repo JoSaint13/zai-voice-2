@@ -52,6 +52,20 @@ CHUTES_STT_ENDPOINT = os.getenv("CHUTES_STT_ENDPOINT")  # optional direct chute 
 CHUTES_TTS_MODEL = os.getenv("CHUTES_TTS_MODEL", "kokoro")
 CHUTES_TTS_ENDPOINT = os.getenv("CHUTES_TTS_ENDPOINT", "https://chutes-kokoro.chutes.ai/speak")
 
+# Language-to-Voice Mapping for Kokoro TTS
+# Maps ISO 639-1 language codes to appropriate Kokoro voice IDs
+LANGUAGE_VOICES = {
+    "en": "af_heart",       # English — American female (default)
+    "ru": "af_heart",       # Russian — fallback to English voice (native TBD)
+    "zh": "af_heart",       # Chinese — fallback (test zf_xiaobei if available)
+    "ja": "af_heart",       # Japanese — fallback (test jf_alpha if available)
+    "ko": "af_heart",       # Korean — fallback
+    "es": "af_heart",       # Spanish — fallback (test ef_dora if available)
+    "fr": "af_heart",       # French — fallback (test ff_siwis if available)
+    "de": "af_heart",       # German — fallback
+    "ar": "af_heart",       # Arabic — fallback
+}
+
 # ── Named LLM Roles ──
 # 🧠 brain_llm — reasoning, routing, chat
 BRAIN_LLM_MODEL = os.getenv("BRAIN_LLM_MODEL", "XiaomiMiMo/MiMo-V2-Flash")
@@ -386,13 +400,26 @@ def call_chutes_stt(audio_base64: str, language: str | None = None) -> str:
 
 
 @retry_with_backoff(max_retries=MAX_RETRIES_TTS, exceptions=(requests.exceptions.RequestException, RuntimeError))
-def call_chutes_tts(text: str, voice: str | None = None) -> str:
-    """Call Chutes TTS, return audio base64 (wav). Retries on failure."""
-    # Kokoro voice IDs are like "af_heart", not model names
-    if not voice or voice in ("kokoro", "csm-1b"):
-        voice_model = "af_heart"
+def call_chutes_tts(text: str, voice: str | None = None, language: str | None = None) -> str:
+    """Call Chutes TTS, return audio base64 (wav). Retries on failure.
+    
+    Args:
+        text: Text to synthesize
+        voice: Optional voice ID (e.g., "af_heart"). If not provided, auto-selects based on language.
+        language: Optional ISO 639-1 language code (e.g., "en", "ru"). Used for voice selection.
+    """
+    # Auto-select voice based on language if not explicitly provided
+    if not voice:
+        if language and language in LANGUAGE_VOICES:
+            voice_model = LANGUAGE_VOICES[language]
+            logger.info(f"[tts] Auto-selected voice {voice_model} for language {language}")
+        else:
+            voice_model = "af_heart"  # fallback
+    elif voice in ("kokoro", "csm-1b"):
+        voice_model = "af_heart"  # legacy model names → default voice
     else:
         voice_model = voice
+        
     if CHUTES_TTS_ENDPOINT:
         payload = {
             "text": text,
@@ -1475,7 +1502,7 @@ def voice_chat():
                 tts_failed_count = 0
                 for i, sentence in enumerate(sentences):
                     try:
-                        chunk_audio = call_chutes_tts(sentence, voice=tts_voice)
+                        chunk_audio = call_chutes_tts(sentence, voice=tts_voice, language=language)
                         yield f"data: {json.dumps({'type': 'audio_chunk', 'index': i, 'audio_base64': chunk_audio, 'text': sentence})}\n\n"
                     except Exception as e:
                         logger.error(f"[tts_stream] chunk {i} failed: {e}")
@@ -1491,7 +1518,7 @@ def voice_chat():
 
         # Non-streaming: single TTS call with fallback to text-only
         try:
-            audio_reply_b64 = call_chutes_tts(assistant_message, voice=tts_voice)
+            audio_reply_b64 = call_chutes_tts(assistant_message, voice=tts_voice, language=language)
         except Exception as e:
             logger.error(f"[voice] TTS failed after retries: {e}. Returning text-only response.")
             # Graceful degradation: return text without audio
@@ -1643,9 +1670,10 @@ def tts():
         data = request.get_json() or {}
         text = data.get("text")
         voice = data.get("voice")
+        language = data.get("language")  # optional language for auto voice selection
         if not text:
             return jsonify({"error": "text required"}), 400
-        audio_b64 = call_chutes_tts(text, voice=voice)
+        audio_b64 = call_chutes_tts(text, voice=voice, language=language)
         return jsonify({"success": True, "audio_base64": audio_b64, "voice": voice or CHUTES_TTS_MODEL, "format": "wav"})
     except RuntimeError as e:
         sc = getattr(e, 'status_code', 500)
