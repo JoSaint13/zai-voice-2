@@ -211,3 +211,232 @@ class WifiSkill:
                 "network": "NomadAI-Guest"
             }
         }
+
+
+class CheckOutSkill:
+    """Handle guest checkout process."""
+
+    name = "check_out"
+    description = "Assist with hotel checkout process and final billing"
+    example_utterances = [
+        "I'd like to check out",
+        "Can I check out now?",
+        "I'm ready to leave",
+        "Process my checkout",
+        "I want to settle my bill",
+    ]
+
+    def __init__(self):
+        pass
+
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        transcription = context.get("transcription", "")
+        session_id = context.get("session_id", "default")
+
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a hotel front desk checkout assistant.
+                Help guests with checkout process. Be concise (2-3 sentences).
+                
+                Checkout Process:
+                1. Confirm room number
+                2. Review final bill (room rate + any charges)
+                3. Payment method (card on file or new payment)
+                4. Return key card
+                5. Late checkout available until 2 PM ($50 fee)
+                
+                Standard checkout time: 11:00 AM
+                Express checkout: Available via app or phone"""
+            },
+            {"role": "user", "content": transcription}
+        ]
+
+        assistant_message = skill_chat(messages)
+
+        return {
+            "response": assistant_message,
+            "action": "checkout_initiated",
+            "metadata": {
+                "skill": self.name,
+                "session_id": session_id,
+                "checkout_type": "standard"
+            }
+        }
+
+
+class ComplaintsSkill:
+    """Handle guest complaints and service recovery."""
+
+    name = "complaints"
+    description = "Log and acknowledge guest complaints or issues"
+    example_utterances = [
+        "I have a complaint",
+        "The room is too noisy",
+        "My AC isn't working",
+        "I'm not happy with the service",
+        "There's a problem with my room",
+    ]
+
+    def __init__(self):
+        pass
+
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        transcription = context.get("transcription", "")
+        session_id = context.get("session_id", "default")
+
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a hotel guest relations manager.
+                Handle complaints with empathy and urgency. Be concise (2-3 sentences).
+                
+                Response Protocol:
+                1. Acknowledge and apologize
+                2. Clarify the issue
+                3. Offer immediate solution or escalation
+                4. Provide timeline for resolution
+                
+                Common Solutions:
+                - Room issues → Offer room change or immediate maintenance
+                - Noise → Move to quieter floor
+                - Service issues → Manager follow-up within 30 min
+                - Billing disputes → Front desk review
+                
+                Always thank them for bringing it to our attention."""
+            },
+            {"role": "user", "content": transcription}
+        ]
+
+        assistant_message = skill_chat(messages)
+
+        return {
+            "response": assistant_message,
+            "action": "complaint_logged",
+            "metadata": {
+                "skill": self.name,
+                "session_id": session_id,
+                "priority": "high",
+                "requires_followup": True
+            }
+        }
+
+
+class WakeUpCallSkill:
+    """Schedule wake-up calls for guests."""
+
+    name = "wake_up_call"
+    description = "Schedule morning wake-up calls"
+    example_utterances = [
+        "Set a wake-up call for 7 AM",
+        "I need a morning call",
+        "Wake me up at 6:30",
+        "Schedule an alarm for tomorrow",
+        "Can you call my room at 8 AM?",
+    ]
+
+    def __init__(self):
+        pass
+
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        transcription = context.get("transcription", "")
+        session_id = context.get("session_id", "default")
+
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a hotel wake-up call coordinator.
+                Schedule wake-up calls for guests. Be concise (2-3 sentences).
+                
+                Process:
+                1. Confirm time (use 12-hour or 24-hour format)
+                2. Confirm room number
+                3. Confirm date (today/tomorrow)
+                4. Set reminder
+                
+                Wake-up Call Features:
+                - Available 5:00 AM to 11:00 AM
+                - Can schedule up to 7 days in advance
+                - Automated call with option to snooze (10 min)
+                - Confirm time in guest's timezone
+                
+                Always repeat back the confirmed time."""
+            },
+            {"role": "user", "content": transcription}
+        ]
+
+        assistant_message = skill_chat(messages)
+
+        return {
+            "response": assistant_message,
+            "action": "wake_up_call_scheduled",
+            "metadata": {
+                "skill": self.name,
+                "session_id": session_id,
+                "scheduled_time": "extracted_from_transcription"
+            }
+        }
+
+
+class BillingInquirySkill:
+    """Provide billing and folio information."""
+
+    name = "billing_inquiry"
+    description = "Answer questions about guest bill and charges"
+    example_utterances = [
+        "What's my current bill?",
+        "How much do I owe?",
+        "Show me my charges",
+        "What are these charges for?",
+        "Can I see my folio?",
+    ]
+
+    def __init__(self):
+        pass
+
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        transcription = context.get("transcription", "")
+        session_id = context.get("session_id", "default")
+
+        mock_folio = """
+        Sample Charges:
+        - Room Rate: $150/night × 2 nights = $300
+        - Room Service: $45
+        - Minibar: $18
+        - Parking: $25/day × 2 = $50
+        - Tax (12%): $49.56
+        Total: $462.56
+        """
+
+        messages = [
+            {
+                "role": "system",
+                "content": f"""You are a hotel billing assistant.
+                Answer billing questions clearly. Be concise (2-3 sentences).
+                
+                Mock Folio Data:
+                {mock_folio}
+                
+                Billing Information:
+                - All charges posted within 24 hours
+                - Minibar charges at checkout
+                - Disputes: Contact front desk
+                - Payment: Card on file or at checkout
+                - Detailed invoice available via email
+                
+                Always offer to send detailed breakdown to guest's email."""
+            },
+            {"role": "user", "content": transcription}
+        ]
+
+        assistant_message = skill_chat(messages)
+
+        return {
+            "response": assistant_message,
+            "action": "billing_info_provided",
+            "metadata": {
+                "skill": self.name,
+                "session_id": session_id,
+                "total_charges": 462.56
+            }
+        }

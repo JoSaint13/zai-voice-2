@@ -24,6 +24,10 @@ def get_all_skills() -> List[Any]:
         HousekeepingSkill,
         AmenitiesSkill,
         WifiSkill,
+        CheckOutSkill,
+        ComplaintsSkill,
+        WakeUpCallSkill,
+        BillingInquirySkill,
     )
     from .sightseeing import (
         RecommendationSkill,
@@ -40,6 +44,10 @@ def get_all_skills() -> List[Any]:
         HousekeepingSkill(),
         AmenitiesSkill(),
         WifiSkill(),
+        CheckOutSkill(),
+        ComplaintsSkill(),
+        WakeUpCallSkill(),
+        BillingInquirySkill(),
         RecommendationSkill(),
         ItinerarySkill(),
         DirectionsSkill(),

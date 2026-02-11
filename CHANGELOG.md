@@ -10,11 +10,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Intent router with Chutes.ai classification
-- Functional concierge skills (room service, housekeeping)
-- Sightseeing skills with RAG
-- Image generation (provider TBD)
-- Video generation (provider TBD)
+- Multi-language validation (Sprint 3)
+- Performance optimization and caching (Sprint 4)
+- Vercel deployment testing with auth disabled
+
+---
+
+## [0.2.1] - 2026-02-11
+
+### Added (Phase 3 Sprint 1 & 2)
+- **Retry Logic**: Exponential backoff for STT/TTS/LLM calls (1.5^attempt)
+  - STT: 3 retries, 30s timeout
+  - TTS: 3 retries, 15s timeout
+  - LLM: 2 retries, 60s timeout
+- **Rate Limiting**: Per-session (20/min) and global (100/min) limits → HTTP 429
+- **Security**: Audio size validation (<10MB), input sanitization, CORS config
+- **Graceful Fallbacks**: TTS failure → text-only response, STT failure → 503 error
+- **4 New Skills**: check_out, complaints, wake_up_call, billing_inquiry
+- **Knowledge Base System**: Hotel-specific KB loaded from JSON, injected into system prompt
+  - Sample KB: NomadAI Hotel Tokyo with amenities, restaurants, policies, FAQ
+  - Auto-formatted for concise system prompt inclusion
+- **11 Total Skills**: Now 8 concierge + 3 sightseeing skills (was 7 total)
+
+### Changed
+- `_execute_tool()` dispatcher now supports all 11 skills via SKILL_MAP
+- `agent_loop()` loads and formats KB from `data/hotels/default_hotel_kb.json`
+- `.gitignore` excludes `data/hotels/*.json` (hotel-specific KB files)
+
+### Technical
+- Skills in `src/skills/` fully wired to agent loop
+- KB schema: general_info, amenities, wifi, room_service, housekeeping, local_recommendations, transportation, policies, emergency, faq
+- Configurable timeouts via env vars: `TIMEOUT_STT`, `TIMEOUT_TTS`, `TIMEOUT_LLM`
 
 ---
 

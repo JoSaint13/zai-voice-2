@@ -33,6 +33,7 @@ Thumbs.db
 *.log
 nohup.out
 *.db
+data/hotels/*.json
 
 # Audio temp files
 *.wav

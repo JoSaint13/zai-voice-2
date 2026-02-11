@@ -885,6 +885,62 @@ SKILL_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_out",
+            "description": "Assist with hotel checkout process and final billing",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request": {"type": "string", "description": "Checkout request details (time, late checkout, express, etc.)"},
+                },
+                "required": ["request"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complaints",
+            "description": "Log and acknowledge guest complaints or service issues",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue": {"type": "string", "description": "Description of the complaint or issue"},
+                },
+                "required": ["issue"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wake_up_call",
+            "description": "Schedule a wake-up call for the guest",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request": {"type": "string", "description": "Wake-up call time and date"},
+                },
+                "required": ["request"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "billing_inquiry",
+            "description": "Provide information about guest bill and charges",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What billing information the guest wants"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 # Map tool names to skill instances
@@ -947,6 +1003,75 @@ def _execute_voice_call(arguments: dict, session_id: str) -> str:
     return f"Unknown voice_call action: {action}"
 
 
+def _load_knowledge_base(hotel_id: str) -> dict:
+    """Load hotel-specific knowledge base from JSON file."""
+    kb_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'hotels', 'default_hotel_kb.json')
+    
+    try:
+        if os.path.exists(kb_path):
+            with open(kb_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if data.get('hotel_id') == hotel_id:
+                    return data.get('knowledge_base', {})
+                logger.warning(f"[kb] hotel_id mismatch: {hotel_id} != {data.get('hotel_id')}")
+        else:
+            logger.warning(f"[kb] file not found: {kb_path}")
+    except Exception as e:
+        logger.error(f"[kb] failed to load: {e}")
+    
+    return {}
+
+
+def _format_knowledge_base(kb: dict) -> str:
+    """Format knowledge base dict into concise text for system prompt."""
+    if not kb:
+        return ""
+    
+    sections = []
+    
+    # General Info
+    if 'general_info' in kb:
+        gi = kb['general_info']
+        sections.append(f"Check-in: {gi.get('check_in', 'N/A')}, Check-out: {gi.get('check_out', 'N/A')}")
+    
+    # Amenities
+    if 'amenities' in kb:
+        am = kb['amenities']
+        sections.append(f"Amenities: Pool ({am.get('pool', {}).get('hours', 'N/A')}), Gym ({am.get('gym', {}).get('hours', 'N/A')}), Spa ({am.get('spa', {}).get('hours', 'N/A')})")
+        if 'restaurant' in am:
+            rest = am['restaurant']
+            sections.append(f"Restaurant: {rest.get('name', 'N/A')} - Breakfast {rest.get('hours', {}).get('breakfast', 'N/A')}, Lunch {rest.get('hours', {}).get('lunch', 'N/A')}, Dinner {rest.get('hours', {}).get('dinner', 'N/A')}")
+    
+    # WiFi
+    if 'wifi' in kb:
+        wifi = kb['wifi']
+        sections.append(f"WiFi: {wifi.get('guest_network', 'N/A')} / Password: {wifi.get('guest_password', 'N/A')}")
+    
+    # Room Service
+    if 'room_service' in kb:
+        rs = kb['room_service']
+        sections.append(f"Room Service: {rs.get('hours', 'N/A')} - {', '.join(rs.get('menu_categories', []))}")
+    
+    # Local Recommendations (top 3)
+    if 'local_recommendations' in kb:
+        recs = kb['local_recommendations']
+        if 'restaurants' in recs:
+            rest_list = [f"{r['name']} ({r['type']}, {r['distance']})" for r in recs['restaurants'][:3]]
+            sections.append(f"Nearby Restaurants: {', '.join(rest_list)}")
+        if 'attractions' in recs:
+            attr_list = [f"{a['name']} ({a['distance']})" for a in recs['attractions'][:3]]
+            sections.append(f"Attractions: {', '.join(attr_list)}")
+    
+    # Transportation
+    if 'transportation' in kb:
+        trans = kb['transportation']
+        if 'nearest_station' in trans:
+            st = trans['nearest_station']
+            sections.append(f"Nearest Station: {st.get('name', 'N/A')} ({st.get('distance', 'N/A')})")
+    
+    return "\n".join(sections)
+
+
 def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iterations: int = 5, language: str | None = None) -> str:
     """
     🧠 Agentic tool-calling loop.
@@ -955,12 +1080,18 @@ def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iteratio
     """
     import re
 
+    # Load knowledge base
+    kb_text = ""
+    if hotel_info and hotel_info.get('id'):
+        kb = _load_knowledge_base(hotel_info['id'])
+        kb_text = _format_knowledge_base(kb)
+
     # Build system prompt
     hotel_context = ""
     if hotel_info:
         hotel_context = f"\nHotel: {hotel_info.get('name', 'NomadAI Hotel')}"
-        if hotel_info.get('knowledge_base'):
-            hotel_context += f"\nHotel Knowledge Base:\n{hotel_info['knowledge_base']}"
+        if kb_text:
+            hotel_context += f"\n\nHotel Information:\n{kb_text}"
 
     LANG_NAMES = {"en": "English", "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "es": "Spanish", "fr": "French", "de": "German", "ar": "Arabic"}
     lang_instruction = ""
