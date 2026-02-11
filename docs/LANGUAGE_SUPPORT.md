@@ -9,22 +9,20 @@
 
 ## Supported Languages
 
+**Current Scope:** English-only (v0.2.2)
+
 | Code | Language | STT Status | LLM Status | TTS Voice | Overall |
 |------|----------|------------|------------|-----------|---------|
 | `en` | English | ✅ Validated (98%+) | ✅ Production | `af_heart` | ✅ Production Ready |
-| `ru` | Russian | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
-| `zh` | Chinese (Mandarin) | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
-| `ja` | Japanese | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
-| `ko` | Korean | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
-| `es` | Spanish | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
-| `fr` | French | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
-| `de` | German | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
-| `ar` | Arabic | ⚠️ Needs Testing | ⚠️ Testing | `af_heart` (EN-only) | ⚠️ Limited (TTS English-only) |
 
-**Legend:**
-- ✅ **Production Ready** — Validated, performs well, recommended
-- ⚠️ **Validation Needed** — Not yet tested, status unknown
-- ❌ **Not Recommended** — Poor quality, frequent failures
+**Multi-language support deferred:** Due to Kokoro TTS English-only limitation discovered during Sprint 3.2 testing. Other languages will be added when alternative TTS provider is available.
+
+### Languages Available in UI (Not Functional)
+The following languages are shown in the UI selector but currently use English TTS:
+- Russian (ru), Chinese (zh), Japanese (ja), Korean (ko)
+- Spanish (es), French (fr), German (de), Arabic (ar)
+
+**Recommendation:** Hide non-English language options in UI until TTS support is added.
 
 ---
 
@@ -305,4 +303,5 @@ System will:
 
 ---
 
-**Status:** Sprint 3 in progress — 3.1 complete, 3.2-3.4 pending
+**Status:** English-only scope for v0.2.2 — Sprint 3 complete with pivot
+**Next:** Sprint 4 (Performance & Caching)

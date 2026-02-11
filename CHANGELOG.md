@@ -10,9 +10,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Multi-language validation (Sprint 3)
 - Performance optimization and caching (Sprint 4)
+- Multi-language support (deferred - needs alternative TTS provider)
 - Vercel deployment testing with auth disabled
+
+---
+
+## [0.2.2] - 2026-02-11
+
+### Added (Phase 3 Sprint 3)
+- **Language-to-Voice Mapping**: `LANGUAGE_VOICES` dict for future multi-language TTS
+- **Enhanced TTS Function**: `call_chutes_tts()` accepts `language` param for auto voice selection
+- **English STT Validation**: 98%+ accuracy confirmed (Whisper large-v3)
+- **Testing Framework**: `scripts/test_language_stt.py` for automated STT validation
+- **Documentation**: Comprehensive `docs/LANGUAGE_SUPPORT.md` with validation results
+- **Coding Agent Skills**: 8 total installed (6 core + 2 i18n)
+  - flask, pytest, vercel-functions-runtime, resilience-patterns, git-commit, code-review
+  - internationalization-i18n, i18n-localization
+
+### Changed
+- **Scope Decision**: English-only for v0.2.2 (multi-language deferred)
+- Updated `/api/voice-chat`, `/api/tts` to pass language parameter
+- All TTS calls now support language-based voice auto-selection
+
+### Discovered
+- **TTS Limitation**: Kokoro `af_heart` voice is English-only
+  - Cannot synthesize non-English text properly (RU/ZH/JA/KO/ES/FR/DE/AR)
+  - Blocks multi-language voice chat functionality
+  - Alternative TTS provider research needed
+
+### Technical
+- LANGUAGE_VOICES mapping: 9 languages → voice IDs (all use af_heart fallback currently)
+- Language param flows: UI → API → STT/LLM/TTS pipeline
+- Future-ready: architecture supports multi-language when TTS provider added
 
 ---
 
