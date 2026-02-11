@@ -842,12 +842,31 @@ For general conversation, just respond directly without tools."""
         }
 
         logger.info(f"[agent_loop] iteration={iteration+1}/{max_iterations} msgs={len(conversations[session_id])}")
-        r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+
+        try:
+            r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+        except Exception as e:
+            logger.error(f"[agent_loop] request failed: {e}")
+            break
 
         if r.status_code != 200:
-            logger.error(f"[agent_loop] brain_llm HTTP {r.status_code}: {r.text[:200]}")
-            # Fallback to simple brain_chat without tools
-            return brain_chat(conversations[session_id])
+            logger.error(f"[agent_loop] brain_llm HTTP {r.status_code}: {r.text[:300]}")
+            # If tools not supported, retry without tools
+            if r.status_code in (400, 422):
+                logger.info("[agent_loop] retrying without tools (model may not support tool calling)")
+                payload.pop('tools', None)
+                payload.pop('tool_choice', None)
+                try:
+                    r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
+                    if r.status_code == 200:
+                        data = r.json()
+                        content = data['choices'][0]['message'].get('content') or ''
+                        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                        conversations[session_id].append({"role": "assistant", "content": content})
+                        return content
+                except Exception as e2:
+                    logger.error(f"[agent_loop] retry without tools also failed: {e2}")
+            break
 
         data = r.json()
         choice = data['choices'][0]
@@ -883,9 +902,16 @@ For general conversation, just respond directly without tools."""
         conversations[session_id].append({"role": "assistant", "content": content})
         return content
 
-    # Max iterations reached — force a final response
-    logger.warning(f"[agent_loop] max iterations ({max_iterations}) reached")
-    return brain_chat(conversations[session_id])
+    # Fallback: strip any tool messages and use simple brain_chat
+    logger.warning(f"[agent_loop] falling back to simple brain_chat")
+    clean_msgs = [m for m in conversations[session_id] if isinstance(m, dict) and m.get("role") in ("system", "user", "assistant")]
+    try:
+        content = brain_chat(clean_msgs)
+    except Exception as e:
+        logger.error(f"[agent_loop] brain_chat fallback failed: {e}")
+        content = "I'm sorry, I'm having trouble processing your request right now. Please try again."
+    conversations[session_id].append({"role": "assistant", "content": content})
+    return content
 
 
 @app.route("/", methods=["GET"])
