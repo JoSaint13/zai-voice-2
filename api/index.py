@@ -402,8 +402,77 @@ def is_faq_question(text: str) -> bool:
 # Initialize skills
 SKILLS = get_all_skills()
 
-# Conversation history (in production, use Redis/database)
+# ──────────────────────────────────────────────────────────────
+# Session Management
+# ──────────────────────────────────────────────────────────────
+
+# Conversation history with session metadata
+# Structure: {session_id: {"messages": [...], "last_activity": timestamp}}
 conversations = {}
+SESSION_TTL = 1800  # 30 minutes in seconds
+MAX_CONTEXT_MESSAGES = 10  # Max messages to accept from client restore
+
+
+def cleanup_expired_sessions():
+    """Remove sessions that have been inactive for > SESSION_TTL."""
+    now = time.time()
+    expired = [sid for sid, data in conversations.items() 
+               if isinstance(data, dict) and now - data.get("last_activity", 0) > SESSION_TTL]
+    for sid in expired:
+        del conversations[sid]
+        logger.info(f"[session] Expired session: {sid}")
+    return len(expired)
+
+
+def touch_session(session_id: str):
+    """Update last activity timestamp for a session."""
+    if session_id in conversations:
+        if isinstance(conversations[session_id], dict):
+            conversations[session_id]["last_activity"] = time.time()
+        else:
+            # Migrate old format (list) to new format (dict)
+            conversations[session_id] = {
+                "messages": conversations[session_id],
+                "last_activity": time.time()
+            }
+
+
+def get_session_messages(session_id: str) -> list:
+    """Get message list for a session."""
+    if session_id not in conversations:
+        return []
+    data = conversations[session_id]
+    if isinstance(data, list):
+        return data  # Old format
+    return data.get("messages", [])
+
+
+def set_session_messages(session_id: str, messages: list):
+    """Set message list for a session."""
+    conversations[session_id] = {
+        "messages": messages,
+        "last_activity": time.time()
+    }
+
+
+def restore_session_from_context(session_id: str, client_context: list, system_prompt: str):
+    """Restore session from client-provided context (for cold start recovery)."""
+    if session_id in conversations:
+        # Session already exists, don't overwrite
+        return
+    
+    if not client_context or not isinstance(client_context, list):
+        return
+    
+    # Limit context size
+    restored = client_context[-MAX_CONTEXT_MESSAGES:]
+    
+    # Ensure system prompt is first
+    if restored and restored[0].get("role") != "system":
+        restored.insert(0, {"role": "system", "content": system_prompt})
+    
+    set_session_messages(session_id, restored)
+    logger.info(f"[session] Restored {len(restored)} messages from client context for {session_id}")
 
 def get_hotel_context(hotel_id):
     """Retrieve hotel details and recommendations from SQLite."""
@@ -801,7 +870,14 @@ def list_providers():
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    """Simple health check with cache stats."""
+    """Simple health check with cache and session stats."""
+    # Cleanup expired sessions
+    cleanup_expired_sessions()
+    
+    # Get session stats
+    active_sessions = len(conversations)
+    total_messages = sum(len(s["messages"]) for s in conversations.values())
+    
     return jsonify({
         "status": "ok",
         "version": APP_VERSION,
@@ -814,6 +890,10 @@ def health():
         "stt_endpoint": VOICE_LISTEN_LLM,
         "tts_endpoint": SPEECH_LLM,
         "cache": faq_cache.get_stats(),
+        "sessions": {
+            "active": active_sessions,
+            "total_messages": total_messages
+        }
     })
 
 
@@ -1245,13 +1325,20 @@ def _format_knowledge_base(kb: dict) -> str:
     return "\n".join(sections)
 
 
-def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iterations: int = 5, language: str | None = None) -> str:
+def agent_loop(user_message: str, session_id: str, hotel_info=None, max_iterations: int = 5, language: str | None = None, client_context: list | None = None) -> str:
     """
     🧠 Agentic tool-calling loop.
     brain_llm decides whether to call tools or respond directly.
     Supports multi-turn tool calls (up to max_iterations).
+    
+    Args:
+        client_context: Optional list of messages from client for session restoration
     """
     import re
+    
+    # Cleanup expired sessions periodically
+    if len(conversations) > 100:  # Only check when many sessions
+        cleanup_expired_sessions()
 
     # Load knowledge base
     kb_text = ""
@@ -1279,13 +1366,20 @@ Use tools when appropriate. Keep spoken responses concise (2-3 sentences).
 If the guest asks you to call a place, use the voice_call tool to initiate and conduct the call, then report back.
 For general conversation, just respond directly without tools.{lang_instruction}"""
 
+    # Restore from client context if session doesn't exist (cold start)
+    if session_id not in conversations and client_context:
+        restore_session_from_context(session_id, client_context, system_prompt)
+    
     # Init or continue conversation — always update system prompt (language may change)
-    if session_id not in conversations:
-        conversations[session_id] = [{"role": "system", "content": system_prompt}]
+    messages = get_session_messages(session_id)
+    if not messages:
+        messages = [{"role": "system", "content": system_prompt}]
     else:
-        conversations[session_id][0] = {"role": "system", "content": system_prompt}
+        messages[0] = {"role": "system", "content": system_prompt}
 
-    conversations[session_id].append({"role": "user", "content": user_message})
+    messages.append({"role": "user", "content": user_message})
+    set_session_messages(session_id, messages)
+    touch_session(session_id)
 
     for iteration in range(max_iterations):
         # Call brain_llm with tools
@@ -1295,14 +1389,14 @@ For general conversation, just respond directly without tools.{lang_instruction}
         }
         payload = {
             'model': BRAIN_LLM_MODEL,
-            'messages': conversations[session_id],
+            'messages': messages,
             'temperature': 0.7,
             'max_tokens': 1024,
             'tools': SKILL_TOOLS,
             'tool_choice': 'auto',
         }
 
-        logger.info(f"[agent_loop] iteration={iteration+1}/{max_iterations} msgs={len(conversations[session_id])}")
+        logger.info(f"[agent_loop] iteration={iteration+1}/{max_iterations} msgs={len(messages)}")
 
         try:
             r = requests.post(BRAIN_LLM_ENDPOINT, headers=headers, json=payload, timeout=(5, 60))
@@ -1323,7 +1417,8 @@ For general conversation, just respond directly without tools.{lang_instruction}
                         data = r.json()
                         content = data['choices'][0]['message'].get('content') or ''
                         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-                        conversations[session_id].append({"role": "assistant", "content": content})
+                        messages.append({"role": "assistant", "content": content})
+                        set_session_messages(session_id, messages)
                         return content
                 except Exception as e2:
                     logger.error(f"[agent_loop] retry without tools also failed: {e2}")
@@ -1336,7 +1431,7 @@ For general conversation, just respond directly without tools.{lang_instruction}
 
         # If model wants to call tools
         if msg.get('tool_calls'):
-            conversations[session_id].append(msg)
+            messages.append(msg)
 
             for tool_call in msg['tool_calls']:
                 fn_name = tool_call['function']['name']
@@ -1349,29 +1444,32 @@ For general conversation, just respond directly without tools.{lang_instruction}
                 result = _execute_tool(fn_name, fn_args, session_id)
                 logger.info(f"[agent_loop] tool_result: {result[:200]}")
 
-                conversations[session_id].append({
+                messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call['id'],
                     "content": result,
                 })
-
+            
+            set_session_messages(session_id, messages)
             continue  # Next iteration — let brain process tool results
 
         # Model gave a direct response (no tool calls)
         content = msg.get('content') or msg.get('reasoning_content') or ''
         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-        conversations[session_id].append({"role": "assistant", "content": content})
+        messages.append({"role": "assistant", "content": content})
+        set_session_messages(session_id, messages)
         return content
 
     # Fallback: strip any tool messages and use simple brain_chat
     logger.warning(f"[agent_loop] falling back to simple brain_chat")
-    clean_msgs = [m for m in conversations[session_id] if isinstance(m, dict) and m.get("role") in ("system", "user", "assistant")]
+    clean_msgs = [m for m in messages if isinstance(m, dict) and m.get("role") in ("system", "user", "assistant")]
     try:
         content = brain_chat(clean_msgs)
     except Exception as e:
         logger.error(f"[agent_loop] brain_chat fallback failed: {e}")
         content = "I'm sorry, I'm having trouble processing your request right now. Please try again."
-    conversations[session_id].append({"role": "assistant", "content": content})
+    messages.append({"role": "assistant", "content": content})
+    set_session_messages(session_id, messages)
     return content
 
 
@@ -1491,7 +1589,10 @@ def chat():
         # Input sanitization
         user_message = sanitize_input(user_message)
         
-        logger.info(f"[chat] session={session_id} brain={BRAIN_LLM_MODEL} len={len(user_message)}")
+        # Get client context for session restore (optional)
+        client_context = data.get("context")
+        
+        logger.info(f"[chat] session={session_id} brain={BRAIN_LLM_MODEL} len={len(user_message)} context={len(client_context) if client_context else 0}")
 
         # Get hotel context if available
         hotel_info = None
@@ -1511,7 +1612,7 @@ def chat():
         
         # Run agentic loop if no cache hit
         if not cache_hit:
-            assistant_message = agent_loop(user_message, session_id, hotel_info=hotel_info)
+            assistant_message = agent_loop(user_message, session_id, hotel_info=hotel_info, client_context=client_context)
             
             # Cache FAQ responses
             if hotel_id and is_faq_question(user_message):
@@ -1575,6 +1676,7 @@ def chat_stream():
     session_id = data.get("session_id", "default-stream")
     hotel_id = data.get("hotel_id")
     user_message = data["message"]
+    client_context = data.get("context")
 
     hotel_info = None
     if hotel_id:
@@ -1584,7 +1686,7 @@ def chat_stream():
 
     def generate():
         try:
-            full = agent_loop(user_message, session_id, hotel_info=hotel_info)
+            full = agent_loop(user_message, session_id, hotel_info=hotel_info, client_context=client_context)
             words = full.split()
             for w in words:
                 yield _sse({"delta": w + " "})
@@ -1611,6 +1713,7 @@ def voice_chat():
         hotel_id = data.get("hotel_id")
         language = data.get("language")
         tts_voice = data.get("tts_voice")
+        client_context = data.get("context")
 
         if not audio_b64:
             return jsonify({"error": "audio_base64 required"}), 400
@@ -1646,7 +1749,7 @@ def voice_chat():
             if not hotel_info:
                 hotel_info = DEFAULT_HOTELS.get(hotel_id)
 
-        assistant_message = agent_loop(transcription, session_id, hotel_info=hotel_info, language=language)
+        assistant_message = agent_loop(transcription, session_id, hotel_info=hotel_info, language=language, client_context=client_context)
 
         # 3) TTS (speech_llm) — stream by sentences if requested, with fallback to text-only
         stream_mode = data.get("stream_tts", False)

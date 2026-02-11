@@ -532,6 +532,42 @@ let voiceEnabled = false; // runtime flag from /api/health
 let ttsVoice = 'kokoro';   // runtime default from /api/health
 let voiceLang = 'en';      // STT language
 
+// ── Session Persistence ──
+const MAX_CONTEXT_MESSAGES = 10;
+const SESSION_STORAGE_KEY = `nomadai_session_${sessionId}`;
+
+function saveMessageToStorage(role, content) {
+    try {
+        const stored = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
+        stored.push({ role, content, timestamp: Date.now() });
+        // Keep only last 50 messages in storage (more than we send, for history)
+        if (stored.length > 50) stored.shift();
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(stored));
+    } catch (e) {
+        console.warn('[storage] Failed to save message:', e);
+    }
+}
+
+function getSessionContext() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
+        // Return last N messages for API context
+        return stored.slice(-MAX_CONTEXT_MESSAGES).map(m => ({ role: m.role, content: m.content }));
+    } catch (e) {
+        console.warn('[storage] Failed to load context:', e);
+        return [];
+    }
+}
+
+function clearSessionStorage() {
+    try {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        console.log('[storage] Session cleared');
+    } catch (e) {
+        console.warn('[storage] Failed to clear session:', e);
+    }
+}
+
 // ── Provider state ──
 let currentProvider = 'chutes';
 let currentModel = '';
@@ -720,6 +756,10 @@ function addMsg(container, role, text) {
     d.innerHTML = `<div class="lbl">${role === 'user' ? 'You' : 'Concierge'}</div><div>${text}</div>`;
     container.appendChild(d);
     container.scrollTop = container.scrollHeight;
+    
+    // Save to localStorage for session persistence
+    saveMessageToStorage(role, text);
+    
     return d;
 }
 
@@ -746,10 +786,18 @@ async function sendChat() {
     const streamingMsg = addMsg(chatMessages, 'assistant', '...');
     let assistantText = '';
     try {
+        const context = getSessionContext();
         const r = await fetch(`${API}/api/chat-stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, session_id: sessionId, hotel_id: HOTEL_ID, provider: currentProvider, model: currentModel })
+            body: JSON.stringify({ 
+                message: text, 
+                session_id: sessionId, 
+                hotel_id: HOTEL_ID, 
+                provider: currentProvider, 
+                model: currentModel,
+                context: context
+            })
         });
         if (!r.ok) {
             const bodyText = await r.text();
@@ -812,6 +860,7 @@ resetBtn.addEventListener('click', async () => {
     try { await fetch(`${API}/api/reset`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:sessionId}) }); } catch(e) {}
     chatMessages.innerHTML = '<div class="msg assistant"><div class="lbl">Concierge</div><div>Conversation reset. How can I help?</div></div>';
     setStatus(chatStatus, 'Ready');
+    clearSessionStorage(); // Clear localStorage
 });
 
 // ═══ Voice ═══
@@ -914,10 +963,19 @@ async function sendVoice(blob) {
             if (useStreaming) {
                 // Streaming TTS mode
                 setStatus(voiceStatus, 'Thinking...');
+                const context = getSessionContext();
                 const r = await fetch(`${API}/api/voice-chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice, language: voiceLang, stream_tts: true })
+                    body: JSON.stringify({ 
+                        audio_base64: b64Audio, 
+                        session_id: sessionId, 
+                        hotel_id: HOTEL_ID, 
+                        tts_voice: ttsVoice, 
+                        language: voiceLang, 
+                        stream_tts: true,
+                        context: context
+                    })
                 });
 
                 const eventReader = r.body.getReader();
@@ -952,10 +1010,18 @@ async function sendVoice(blob) {
                 }
             } else {
                 // Non-streaming fallback
+                const context = getSessionContext();
                 const r = await fetch(`${API}/api/voice-chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audio_base64: b64Audio, session_id: sessionId, hotel_id: HOTEL_ID, tts_voice: ttsVoice, language: voiceLang })
+                    body: JSON.stringify({ 
+                        audio_base64: b64Audio, 
+                        session_id: sessionId, 
+                        hotel_id: HOTEL_ID, 
+                        tts_voice: ttsVoice, 
+                        language: voiceLang,
+                        context: context
+                    })
                 });
                 const data = await r.json();
                 if (data.success) {
@@ -987,6 +1053,7 @@ voiceResetBtn.addEventListener('click', async () => {
     try { await fetch(`${API}/api/reset`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:sessionId}) }); } catch(e) {}
     voiceMessages.innerHTML = '<div class="msg assistant"><div class="lbl">Concierge</div><div>Conversation reset. Hold the mic to speak.</div></div>';
     setStatus(voiceStatus, 'Ready');
+    clearSessionStorage(); // Clear localStorage
 });
 
 voiceSelect.addEventListener('change', () => {

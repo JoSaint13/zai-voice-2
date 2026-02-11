@@ -9,10 +9,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### In Progress (Phase 3 Sprint 4)
+- [x] Sprint 4.1: FAQ response caching (LRU + TTL)
+- [x] Sprint 4.2: Client-side session persistence
+- [ ] Sprint 4.3: Structured logging & observability
+- [ ] Sprint 4.4: Latency optimization
+
 ### Planned
-- Performance optimization and caching (Sprint 4)
 - Multi-language support (deferred - needs alternative TTS provider)
 - Vercel deployment testing with auth disabled
+
+---
+
+## [0.2.3] - 2026-02-11 (Sprint 4.1 & 4.2)
+
+### Added (Phase 3 Sprint 4.1 — FAQ Caching)
+- **FAQ Response Cache**: Thread-safe LRU cache with TTL (500 max, 1h expiry)
+- **FAQ Detection**: 15 regex patterns (wifi, breakfast, pool, parking, hours, etc.)
+- **Cache Headers**: `X-Cache: HIT/MISS` for debugging
+- **Cache API**: `/api/cache/clear` endpoint for manual invalidation
+- **Cache Stats**: Integrated into `/api/health` endpoint (hits, misses, evictions, hit_rate)
+- **Performance**: Instant response on cache hit (~0ms), 50%+ hit rate on FAQ questions
+
+### Added (Phase 3 Sprint 4.2 — Session Persistence)
+- **Backend Session Management**:
+  - New session structure: `{session_id: {"messages": [...], "last_activity": timestamp}}`
+  - Session TTL: 30 minutes of inactivity → auto-cleanup
+  - `restore_session_from_context()`: accepts last 10 messages from client
+  - Helper functions: `touch_session()`, `get_session_messages()`, `set_session_messages()`
+- **Frontend LocalStorage**:
+  - Chat history stored per session in `localStorage`
+  - `getSessionContext()`: retrieves last 10 messages
+  - All API calls (`/api/chat`, `/api/voice-chat`, `/api/chat-stream`) send `context` field
+  - Reset button clears `localStorage`
+- **Session Stats**: Active sessions and message counts in `/api/health`
+- **Test Script**: `scripts/test_session_persistence.sh` for validation
+
+### Added (UX Improvement)
+- **Voice Interrupt**: Stop TTS audio immediately when user presses mic button
+- `stopAllAudio()`: pauses audio, resets playback, clears queue
+- Cleaner hold-to-speak experience (no audio overlap)
+
+### Technical Details
+- Session persistence survives Vercel cold starts via client-side restore
+- FAQ cache: MD5 key normalization, case-insensitive matching
+- Maximum context payload: 10 messages, ~8KB limit
+- Migration: Old session format (list) → new format (dict) handled transparently
 
 ---
 
