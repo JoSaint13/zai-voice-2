@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Chat TTS Mute Toggle**: Control voice output in chat panel
+  - Mute button next to Reset (🔇 Muted / 🔊 Sound On)
+  - Default state: muted (no auto-play TTS)
+  - Click to toggle voice on/off
+  - State persists in localStorage
+  - Cancels ongoing speech when muting
+  - Visual feedback: gray (muted) / cyan (unmuted)
+
 ### Planned
 - Multi-language support (deferred - needs alternative TTS provider)
 - Vercel deployment testing with auth disabled
