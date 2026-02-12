@@ -26,6 +26,8 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Engineers | System design, components |
 | [ROADMAP.md](ROADMAP.md) | All teams | Implementation phases, timeline |
 | [TEAM.md](TEAM.md) | Management | Team structure, responsibilities |
+| [BRAIN_AGENT_SKILLS.md](BRAIN_AGENT_SKILLS.md) | Developers | 12 LLM tools/functions reference |
+| [KNOWLEDGE_ACCESS_STRATEGY.md](KNOWLEDGE_ACCESS_STRATEGY.md) | Developers | Meta-query handling strategy |
 
 ---
 
@@ -39,6 +41,8 @@
 ### For Developers
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical design
 - [docs/readers/DEVELOPER.md](readers/DEVELOPER.md) - Developer guide
+- [BRAIN_AGENT_SKILLS.md](BRAIN_AGENT_SKILLS.md) - Agent skills reference
+- [KNOWLEDGE_ACCESS_STRATEGY.md](KNOWLEDGE_ACCESS_STRATEGY.md) - KB access patterns
 
 ### For Operations
 - [docs/readers/OPERATIONS.md](readers/OPERATIONS.md) - Deployment & monitoring
