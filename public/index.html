@@ -191,8 +191,9 @@
         .chat-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; gap: 8px; }
         .btn-sm {
             min-height: 36px; padding: 0 14px; border-radius: 10px; font-size: .8rem; cursor: pointer;
-            border: 1px solid #444; background: transparent; color: #888;
+            border: 1px solid #444; background: transparent; color: #888; transition: all .2s;
         }
+        .btn-sm:hover { background: rgba(255,255,255,.05); }
         .btn-sm:active { border-color: var(--primary); color: var(--primary); }
         .status-text { flex: 1; text-align: right; color: #555; font-size: .8rem; }
         .status-text.error { color: var(--danger); }
@@ -321,6 +322,9 @@
                 </div>
                 <div class="chat-footer">
                     <button class="btn-sm" id="resetBtn">Reset</button>
+                    <button class="btn-sm" id="chatMuteBtn" title="Toggle voice output">
+                        <span id="chatMuteIcon">🔇</span> <span id="chatMuteLabel">Muted</span>
+                    </button>
                     <div class="status-text" id="chatStatus">Ready</div>
                 </div>
             </div>
@@ -546,6 +550,10 @@ let voiceEnabled = false; // runtime flag from /api/health
 let ttsVoice = 'kokoro';   // runtime default from /api/health
 let voiceLang = 'en';      // STT language
 
+// ── Chat TTS Mute State ──
+const CHAT_MUTE_KEY = 'nomadai_chat_muted';
+let chatTTSMuted = localStorage.getItem(CHAT_MUTE_KEY) !== 'false'; // default: muted
+
 // ── Session Persistence ──
 const MAX_CONTEXT_MESSAGES = 10;
 const SESSION_STORAGE_KEY = `nomadai_session_${sessionId}`;
@@ -595,6 +603,9 @@ const chatMessages    = $('#chatMessages');
 const chatInput       = $('#chatInput');
 const chatSendBtn     = $('#chatSendBtn');
 const resetBtn        = $('#resetBtn');
+const chatMuteBtn     = $('#chatMuteBtn');
+const chatMuteIcon    = $('#chatMuteIcon');
+const chatMuteLabel   = $('#chatMuteLabel');
 const chatStatus      = $('#chatStatus');
 const voiceMessages   = $('#voiceMessages');
 const micBtn          = $('#micBtn');
@@ -882,6 +893,35 @@ resetBtn.addEventListener('click', async () => {
     setStatus(chatStatus, 'Ready');
     clearSessionStorage(); // Clear localStorage
 });
+
+// ═══ Chat TTS Mute Toggle ═══
+function updateMuteButton() {
+    if (chatTTSMuted) {
+        chatMuteIcon.textContent = '🔇';
+        chatMuteLabel.textContent = 'Muted';
+        chatMuteBtn.style.color = '#888';
+    } else {
+        chatMuteIcon.textContent = '🔊';
+        chatMuteLabel.textContent = 'Sound On';
+        chatMuteBtn.style.color = 'var(--primary)';
+    }
+}
+
+chatMuteBtn.addEventListener('click', () => {
+    chatTTSMuted = !chatTTSMuted;
+    localStorage.setItem(CHAT_MUTE_KEY, chatTTSMuted.toString());
+    updateMuteButton();
+    
+    // Cancel any ongoing speech
+    if (chatTTSMuted && 'speechSynthesis' in window) {
+        speechSynthesis.cancel();
+    }
+    
+    console.log('[TTS] Chat mute:', chatTTSMuted);
+});
+
+// Initialize mute button state
+updateMuteButton();
 
 // ═══ Voice ═══
 let mediaRecorder, audioChunks = [], isRecording = false;
@@ -1536,6 +1576,12 @@ function setStatus(el, msg, isError = false) {
 }
 
 function speakText(text) {
+    // Check if chat TTS is muted
+    if (chatTTSMuted) {
+        console.log('[TTS] Muted, skipping speech');
+        return;
+    }
+    
     if ('speechSynthesis' in window) {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text.replace(/\[.*?\]/g, ''));
