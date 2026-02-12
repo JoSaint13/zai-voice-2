@@ -445,6 +445,45 @@ def is_faq_question(text: str) -> bool:
     return False
 
 
+def is_meta_query(text: str) -> bool:
+    """
+    Detect meta-queries about bot capabilities/knowledge.
+    These should get structured summaries, not KB dumps.
+    """
+    patterns = [
+        r"show (me )?your (knowledge|capabilities|skills|features)",
+        r"what can you (do|help|assist)( with| me with)?",
+        r"what do you (know|offer)",
+        r"list (all |your )?(services|features|capabilities)",
+        r"tell me (what you can do|about your (capabilities|features))",
+        r"what (are|is) your (capabilities|knowledge|skills|features)",
+        r"help me understand what you (do|can do|offer)",
+        r"give me an overview",
+    ]
+    text_lower = text.lower()
+    return any(re.search(p, text_lower) for p in patterns)
+
+
+def generate_capabilities_summary(hotel_info: dict = None) -> str:
+    """
+    Generate a friendly, structured overview of capabilities.
+    Voice-optimized: concise, scannable, actionable.
+    """
+    hotel_name = hotel_info.get('name', 'this hotel') if hotel_info else 'this hotel'
+    
+    return f"""I'm your AI concierge at {hotel_name}! I can help you with:
+
+🏨 **Hotel Services** - Room service, housekeeping, check-in/out assistance
+
+🍴 **Dining & Facilities** - Restaurant hours, pool, gym, spa information
+
+🗺️ **Local Exploration** - Nearby restaurants, attractions, directions
+
+📞 **Personal Assistance** - Make phone calls, create itineraries
+
+What would you like to know more about?"""
+
+
 def estimate_query_complexity(user_message: str, session_messages: list) -> str:
     """
     Estimate query complexity to optimize max_tokens.
@@ -1597,6 +1636,22 @@ For general conversation, just respond directly without tools.{lang_instruction}
     messages.append({"role": "user", "content": user_message})
     set_session_messages(session_id, messages)
     touch_session(session_id)
+    
+    # Handle meta-queries (capabilities/knowledge questions) before LLM call
+    # This provides structured, friendly responses instead of KB dumps
+    if is_meta_query(user_message):
+        response = generate_capabilities_summary(hotel_info)
+        messages.append({"role": "assistant", "content": response})
+        set_session_messages(session_id, messages)
+        
+        log_structured("meta_query_handled",
+            session_id=session_id,
+            query=user_message[:50],
+            bypassed_llm=True,
+            latency_ms=0)
+        
+        logger.info(f"[agent_loop] meta-query handled directly (bypassed LLM)")
+        return response
     
     # Adaptive max_tokens based on query complexity (Sprint 4.4 optimization)
     complexity = estimate_query_complexity(user_message, messages)

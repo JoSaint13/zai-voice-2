@@ -16,6 +16,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2026-02-12 (UX Improvement - Meta-Query Handling)
+
+### Fixed
+- **Meta-Query UX Issue**: "show me your knowledge" no longer dumps entire knowledge base
+  - Added `is_meta_query()`: pattern-based detection for capability questions
+  - Added `generate_capabilities_summary()`: structured 4-category response
+  - Detects queries like: "what can you do", "show me your knowledge", "give me an overview"
+  - Returns friendly summary (Hotel Services, Dining, Local Exploration, Personal Assistance)
+  - Bypasses LLM call: instant response (~0ms vs 1-3s)
+  - Logged as `meta_query_handled` event with `bypassed_llm=true`
+
+### Changed
+- Agent loop now checks for meta-queries before calling LLM
+- Specific questions (e.g., "what time is breakfast") still use normal LLM flow
+- Meta-query responses are voice-optimized (concise, scannable, actionable)
+
+### Added
+- Test suite: `scripts/test_meta_query_fix.sh` (6 test scenarios)
+- Documentation: `docs/KNOWLEDGE_ACCESS_STRATEGY.md` (3-tier response strategy)
+- 8 meta-query patterns: capabilities, knowledge, overview, features, help
+
+### Performance
+- Meta-queries: <100ms (instant, no LLM call)
+- Specific queries: unchanged (1.4-3s depending on complexity)
+
+---
+
 ## [0.3.0] - 2026-02-11 (Sprint 4 Complete - Performance & Caching)
 
 ### Added (Phase 3 Sprint 4.3 — Observability)
