@@ -26,16 +26,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Returns friendly summary (Hotel Services, Dining, Local Exploration, Personal Assistance)
   - Bypasses LLM call: instant response (~0ms vs 1-3s)
   - Logged as `meta_query_handled` event with `bypassed_llm=true`
+- **Markdown Rendering**: Bot responses now properly format markdown
+  - Added marked.js v11.2.0 for parsing markdown in frontend
+  - Bold text (`**text**`) now renders as bold instead of raw markdown
+  - Line breaks preserved correctly
+  - Emojis display properly (🏨 🍴 🗺️ 📞)
 
 ### Changed
 - Agent loop now checks for meta-queries before calling LLM
 - Specific questions (e.g., "what time is breakfast") still use normal LLM flow
 - Meta-query responses are voice-optimized (concise, scannable, actionable)
+- Frontend `addMsg()` now parses bot responses as markdown (user messages remain plain text)
 
 ### Added
 - Test suite: `scripts/test_meta_query_fix.sh` (6 test scenarios)
+- Test suite: `scripts/test_markdown_rendering.sh` (visual verification guide)
 - Documentation: `docs/KNOWLEDGE_ACCESS_STRATEGY.md` (3-tier response strategy)
 - 8 meta-query patterns: capabilities, knowledge, overview, features, help
+- CSS styling for markdown elements: paragraphs, bold, lists, code, links
 
 ### Performance
 - Meta-queries: <100ms (instant, no LLM call)
