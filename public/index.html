@@ -87,7 +87,7 @@
         /* ── Chat Panel ── */
         .chat-box {
             background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border);
-            height: 50vh; min-height: 280px; max-height: 500px;
+            height: 65vh; min-height: 350px; max-height: 650px;
             display: flex; flex-direction: column; overflow: hidden;
         }
         .chat-messages {
@@ -240,7 +240,7 @@
         /* ── Responsive ── */
         @media (max-width: 600px) {
             h1 { font-size: 1.6rem; }
-            .chat-box { height: 45vh; }
+            .chat-box { height: 60vh; }
             .grid2 { grid-template-columns: 1fr; }
         }
         @media (min-width: 768px) {
@@ -285,14 +285,6 @@
             <label>Model:</label>
             <select id="modelSelect" disabled><option>Loading...</option></select>
             <span class="provider-badge" id="providerBadge">—</span>
-        </div>
-
-        <div class="cap-grid">
-            <span class="cap"><span class="dot green"></span> Multi-Model Chat</span>
-            <span class="cap"><span class="dot blue"></span> Translation</span>
-            <span class="cap"><span class="dot green"></span> Skill Router</span>
-            <span class="cap"><span class="dot purple"></span> DeepSeek V3</span>
-            <span class="cap"><span class="dot purple"></span> Qwen3</span>
         </div>
     </header>
 
